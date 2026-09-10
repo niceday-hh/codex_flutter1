@@ -2,8 +2,6 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
   build-apk:
@@ -22,8 +20,10 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Rebuild source archive
+        run: cat source/chunks/*.txt | base64 -d > /tmp/smart_budget_ci.zip
       - name: Unpack source
-        run: unzip -q source/smart_budget_ci.zip
+        run: unzip -q /tmp/smart_budget_ci.zip
       - name: Create Android host
         working-directory: smart_budget_flutter
         run: bash ./tool/bootstrap_android.sh

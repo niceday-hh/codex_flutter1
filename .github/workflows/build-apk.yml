@@ -31,7 +31,7 @@ jobs:
       - name: Apply Flutter compatibility fixes
         working-directory: smart_budget_flutter
         run: |
-          sed -i "/package:flutter\/foundation.dart/a import 'package:flutter/widgets.dart';" lib/app_store.dart
+          sed -i "s#import 'package:flutter/foundation.dart';#import 'package:flutter/widgets.dart';#" lib/app_store.dart
           sed -i 's/Icons.add_rounded_circled_solid/Icons.add_circle_rounded/g' lib/shell.dart
       - name: Create Android host
         working-directory: smart_budget_flutter

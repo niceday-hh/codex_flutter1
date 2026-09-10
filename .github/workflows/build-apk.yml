@@ -2,6 +2,8 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build-apk:
@@ -22,6 +24,8 @@ jobs:
           cache: true
       - name: Rebuild source archive
         run: cat source/chunks/*.txt | base64 -d > /tmp/smart_budget_ci.zip
+      - name: Verify source archive
+        run: unzip -t /tmp/smart_budget_ci.zip
       - name: Unpack source
         run: unzip -q /tmp/smart_budget_ci.zip
       - name: Create Android host

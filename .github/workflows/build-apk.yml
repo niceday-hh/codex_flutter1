@@ -2,6 +2,8 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build-apk:
@@ -20,19 +22,32 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Rebuild v2 source archive
+        run: cat source/v2/*.txt | base64 -d > /tmp/shiguang_v2.zip
+      - name: Verify v2 source archive
+        run: |
+          echo 'fbb072948024f63590427cefb30c8d0089e7c67864d84318377f1157a2d6860e  /tmp/shiguang_v2.zip' | sha256sum -c -
+          unzip -t /tmp/shiguang_v2.zip
+      - name: Unpack v2 source
+        run: unzip -q /tmp/shiguang_v2.zip
       - name: Create Android host
+        working-directory: smart_budget_flutter
         run: bash ./tool/bootstrap_android.sh
       - name: Resolve dependencies
+        working-directory: smart_budget_flutter
         run: flutter pub get
       - name: Analyze
+        working-directory: smart_budget_flutter
         run: flutter analyze --no-fatal-infos
       - name: Test
+        working-directory: smart_budget_flutter
         run: flutter test
       - name: Build ARM64 release APK
+        working-directory: smart_budget_flutter
         run: flutter build apk --release --target-platform android-arm64
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: shiguang-ledger-arm64-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: smart_budget_flutter/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error

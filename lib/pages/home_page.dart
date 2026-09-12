@@ -161,8 +161,10 @@ class _HomePageState extends State<HomePage> {
                     Expanded(
                       child: _SummaryCell(
                         label: '结余',
-                        value: store.displayMoney(income - expense),
-                        color: AppPalette.primaryDeep,
+                        value: _balanceText(store, income - expense),
+                        color: income - expense < 0
+                            ? const Color(0xFFD95B67)
+                            : AppPalette.primaryDeep,
                       ),
                     ),
                   ],
@@ -1032,6 +1034,7 @@ class _AmountQuickEditor extends StatefulWidget {
 
 class _AmountQuickEditorState extends State<_AmountQuickEditor> {
   late String _value;
+  bool _replaceOnNextInput = true;
 
   @override
   void initState() {
@@ -1043,6 +1046,11 @@ class _AmountQuickEditorState extends State<_AmountQuickEditor> {
     HapticFeedback.selectionClick();
     setState(() {
       if (key == '⌫') {
+        if (_replaceOnNextInput) {
+          _value = '0';
+          _replaceOnNextInput = false;
+          return;
+        }
         if (_value.isNotEmpty) {
           _value = _value.substring(0, _value.length - 1);
         }
@@ -1050,7 +1058,17 @@ class _AmountQuickEditorState extends State<_AmountQuickEditor> {
         return;
       }
       if (key == '.') {
+        if (_replaceOnNextInput) {
+          _value = '0.';
+          _replaceOnNextInput = false;
+          return;
+        }
         if (!_value.contains('.')) _value = '$_value.';
+        return;
+      }
+      if (_replaceOnNextInput) {
+        _value = key;
+        _replaceOnNextInput = false;
         return;
       }
       final dot = _value.indexOf('.');
@@ -1225,6 +1243,12 @@ class _EntryActionTile extends StatelessWidget {
 
 String _trimAmount(double value) =>
     value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
+String _balanceText(AppStore store, double value) {
+  if (store.hideAmounts) return '••••';
+  if (value < 0) return '-${store.displayMoney(value.abs())}';
+  return store.displayMoney(value);
+}
 
 class _SummaryCell extends StatelessWidget {
   const _SummaryCell({

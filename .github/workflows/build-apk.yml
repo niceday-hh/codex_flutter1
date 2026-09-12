@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -18,52 +18,61 @@ jobs:
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check signing configuration
-        id: signing
+      - name: Read app version
+        id: meta
         shell: bash
         run: |
-          if [[ -n "$KEYSTORE_B64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "Long-term signing secrets detected."
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Signing secrets are not configured yet; build/release steps will be skipped."
-          fi
+          set -euo pipefail
+          APP_VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml)"
+          VERSION_NAME="${APP_VERSION%%+*}"
+          VERSION_CODE="${APP_VERSION##*+}"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "apk_name=shiguang-ledger-v${VERSION_NAME}-arm64.apk" >> "$GITHUB_OUTPUT"
+          echo "Building v${VERSION_NAME} (versionCode ${VERSION_CODE})"
+
+      - name: Check signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          test -n "$RELEASE_TOKEN"
+          echo "Fixed signing and release secrets detected."
 
       - name: Set up Java 17
-        if: steps.signing.outputs.ready == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Flutter stable
-        if: steps.signing.outputs.ready == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Create Android host
-        if: steps.signing.outputs.ready == 'true'
         run: bash ./tool/bootstrap_android.sh
 
       - name: Configure fixed release signing
-        if: steps.signing.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
           printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/shiguang-release.jks
-          cat > android/key.properties <<EOF
+          cat > android/key.properties <<EOF2
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
           storeFile=shiguang-release.jks
-          EOF
+          EOF2
           python3 - <<'PY'
           from pathlib import Path
           p = Path('android/app/build.gradle.kts')
@@ -80,23 +89,18 @@ jobs:
           PY
 
       - name: Resolve dependencies
-        if: steps.signing.outputs.ready == 'true'
         run: flutter pub get
 
       - name: Analyze
-        if: steps.signing.outputs.ready == 'true'
         run: flutter analyze --no-fatal-infos
 
       - name: Test
-        if: steps.signing.outputs.ready == 'true'
         run: flutter test
 
       - name: Build fixed-signed ARM64 APK
-        if: steps.signing.outputs.ready == 'true'
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Verify signing certificate and schemes
-        if: steps.signing.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -106,78 +110,32 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$INPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
           grep -qi 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/apksigner-verify.txt"
           grep -qi '7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95' "$RUNNER_TEMP/apksigner-verify.txt"
-          cp "$INPUT" build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk
+          cp "$INPUT" "build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}"
 
-      - name: Upload fixed-signed APK
-        if: steps.signing.outputs.ready == 'true'
+      - name: Upload fixed-signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shiguang-ledger-v2.1.0-fixed-signing-arm64
-          path: build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk
+          name: shiguang-ledger-v${{ steps.meta.outputs.version_name }}-fixed-signing-arm64
+          path: build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}
           if-no-files-found: error
 
-      - name: Publish historical and current Releases
-        if: steps.signing.outputs.ready == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      - name: Publish GitHub Release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ -z "$RELEASE_TOKEN" ]]; then
-            echo "RELEASE_TOKEN is not configured."
-            exit 1
+          VERSION="${{ steps.meta.outputs.version_name }}"
+          TAG="v${VERSION}"
+          APK="build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}"
+          NOTES="release_notes/v${VERSION}.md"
+          if [[ ! -f "$NOTES" ]]; then
+            NOTES="$RUNNER_TEMP/release-notes.md"
+            printf '## 拾光账本 v%s\n\n自动构建的长期签名版本。\n' "$VERSION" > "$NOTES"
           fi
-
-          mkdir -p "$RUNNER_TEMP/releases/v01" "$RUNNER_TEMP/releases/v20"
-          gh api /repos/${{ github.repository }}/actions/artifacts/10178062807/zip > "$RUNNER_TEMP/v01.zip"
-          gh api /repos/${{ github.repository }}/actions/artifacts/10271082903/zip > "$RUNNER_TEMP/v20.zip"
-          unzip -q "$RUNNER_TEMP/v01.zip" -d "$RUNNER_TEMP/releases/v01"
-          unzip -q "$RUNNER_TEMP/v20.zip" -d "$RUNNER_TEMP/releases/v20"
-
-          V01_SRC="$(find "$RUNNER_TEMP/releases/v01" -type f -name '*.apk' | head -1)"
-          V20_SRC="$(find "$RUNNER_TEMP/releases/v20" -type f -name '*.apk' | head -1)"
-          V21_SRC="build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk"
-          cp "$V01_SRC" "$RUNNER_TEMP/拾光账本-v0.1.0-arm64.apk"
-          cp "$V20_SRC" "$RUNNER_TEMP/拾光账本-v2.0.0-arm64.apk"
-
-          cat > "$RUNNER_TEMP/v01.md" <<'NOTES'
-          ## 拾光账本 v0.1.0
-          首个 Flutter Android 原型版本：完成基础首页、记账、账单、图表与本地持久化框架，并针对荣耀 100 / ARM64 构建。
-
-          > 该历史版本使用当次云 Runner 的临时签名，只用于历史留档。不能直接覆盖升级到长期签名版本。
-          NOTES
-
-          cat > "$RUNNER_TEMP/v20.md" <<'NOTES'
-          ## 拾光账本 v2.0.0
-          UI 与功能大幅升级：明细按月查看、报表趋势节点与分类钻取、预算页、我的页、完整支出/收入分类、常用备注，以及 CSV 导入导出。
-
-          > 该历史版本使用临时云签名。迁移到 v2.1.0 长期签名版前，请先导出 CSV，卸载旧版后再安装 v2.1.0，并导入 CSV。之后的版本可以直接覆盖升级。
-          NOTES
-
-          cat > "$RUNNER_TEMP/v21.md" <<'NOTES'
-          ## 拾光账本 v2.1.0 · 长期签名起点
-          - 明细页取消左滑直接删除；分类、名称/备注、金额支持分区快捷编辑。
-          - 长按账单进入管理菜单，删除增加二次确认。
-          - 报表排行榜和分类构成扩大整行/整卡触控范围。
-          - 常用按钮热区针对荣耀 100 大屏单手操作优化。
-          - 从本版本开始启用固定长期 Android 签名，后续只要 versionCode 递增即可直接覆盖升级。
-
-          **首次从 v0.1.0 / v2.0.0 迁移：**请先导出 CSV → 卸载旧版 → 安装此版本 → 导入 CSV。只需要这一次。
-          NOTES
-
-          export GH_TOKEN="$RELEASE_TOKEN"
-
-          ensure_release() {
-            local tag="$1" target="$2" title="$3" notes="$4" asset="$5"
-            if gh release view "$tag" >/dev/null 2>&1; then
-              gh release edit "$tag" --title "$title" --notes-file "$notes"
-            else
-              gh release create "$tag" --target "$target" --title "$title" --notes-file "$notes"
-            fi
-            gh release upload "$tag" "$asset" --clobber
-          }
-
-          ensure_release v0.1.0 4eff33b1a7b209ef34de6c8374370efbbc492dac '拾光账本 v0.1.0' "$RUNNER_TEMP/v01.md" "$RUNNER_TEMP/拾光账本-v0.1.0-arm64.apk"
-          ensure_release v2.0.0 2edf9ed2a3fedebe9ca95eab786cf7e3ca8865b6 '拾光账本 v2.0.0' "$RUNNER_TEMP/v20.md" "$RUNNER_TEMP/拾光账本-v2.0.0-arm64.apk"
-          ensure_release v2.1.0 "$GITHUB_SHA" '拾光账本 v2.1.0 · 长期签名版' "$RUNNER_TEMP/v21.md" "$V21_SRC"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "拾光账本 v${VERSION}" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "拾光账本 v${VERSION}" --notes-file "$NOTES"
+          fi
+          gh release upload "$TAG" "$APK" --clobber

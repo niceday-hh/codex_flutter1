@@ -24,28 +24,40 @@ class WarmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final card = Container(
-      margin: margin,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: gradient == null ? Theme.of(context).colorScheme.surface.withValues(alpha: dark ? 0.94 : 0.96) : null,
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: dark ? Colors.white.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.95),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: dark ? Colors.black.withValues(alpha: 0.18) : const Color(0xFF8A6B38).withValues(alpha: 0.08),
-            blurRadius: 28,
-            offset: const Offset(0, 12),
+    final card = RepaintBoundary(
+      child: Container(
+        margin: margin,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: gradient == null
+              ? Theme.of(context).colorScheme.surface.withValues(alpha: dark ? 0.95 : 0.97)
+              : null,
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.07)
+                : Colors.white.withValues(alpha: 0.92),
           ),
-        ],
+          boxShadow: [
+            BoxShadow(
+              color: dark
+                  ? Colors.black.withValues(alpha: 0.16)
+                  : const Color(0xFF8A6B38).withValues(alpha: 0.065),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: child,
       ),
-      child: child,
     );
     if (onTap == null) return card;
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: card);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: card,
+    );
   }
 }
 
@@ -56,17 +68,22 @@ class FrostedBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: (dark ? const Color(0xFF181B1E) : Colors.white).withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.08 : 0.92)),
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: (dark ? const Color(0xFF181B1E) : Colors.white)
+                  .withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: dark ? 0.08 : 0.88),
+              ),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
@@ -74,7 +91,12 @@ class FrostedBar extends StatelessWidget {
 }
 
 class CategoryAvatar extends StatelessWidget {
-  const CategoryAvatar({super.key, required this.category, this.size = 44, this.selected = false});
+  const CategoryAvatar({
+    super.key,
+    required this.category,
+    this.size = 44,
+    this.selected = false,
+  });
 
   final String category;
   final double size;
@@ -84,7 +106,7 @@ class CategoryAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = colorForCategory(category);
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 170),
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -92,7 +114,13 @@ class CategoryAvatar extends StatelessWidget {
         color: selected ? color : color.withValues(alpha: 0.12),
         shape: BoxShape.circle,
         boxShadow: selected
-            ? [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 7))]
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.20),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
+                ),
+              ]
             : null,
       ),
       child: Text(
@@ -140,10 +168,17 @@ class MonthSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: compact ? 19 : 23);
+    final style = Theme.of(context)
+        .textTheme
+        .titleLarge
+        ?.copyWith(fontSize: compact ? 19 : 23);
     return Row(
       children: [
-        _RoundIcon(icon: Icons.chevron_left_rounded, onTap: onPrevious, compact: compact),
+        _RoundIcon(
+          icon: Icons.chevron_left_rounded,
+          onTap: onPrevious,
+          compact: compact,
+        ),
         Expanded(
           child: Text(
             '${month.year}年 ${month.month}月',
@@ -151,33 +186,50 @@ class MonthSwitcher extends StatelessWidget {
             style: style,
           ),
         ),
-        _RoundIcon(icon: Icons.chevron_right_rounded, onTap: onNext, compact: compact),
+        _RoundIcon(
+          icon: Icons.chevron_right_rounded,
+          onTap: onNext,
+          compact: compact,
+        ),
       ],
     );
   }
 }
 
 class _RoundIcon extends StatelessWidget {
-  const _RoundIcon({required this.icon, required this.onTap, required this.compact});
+  const _RoundIcon({
+    required this.icon,
+    required this.onTap,
+    required this.compact,
+  });
   final IconData icon;
   final VoidCallback onTap;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final extent = compact ? 46.0 : 50.0;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Container(
-        width: compact ? 44 : 48,
-        height: compact ? 44 : 48,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
-          shape: BoxShape.circle,
-          border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.7)),
+      child: SizedBox(
+        width: extent,
+        height: extent,
+        child: Center(
+          child: Container(
+            width: compact ? 40 : 44,
+            height: compact ? 40 : 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.74),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.7),
+              ),
+            ),
+            child: Icon(icon, size: compact ? 24 : 28),
+          ),
         ),
-        child: Icon(icon, size: compact ? 24 : 28),
       ),
     );
   }
@@ -202,9 +254,11 @@ class PillTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.58),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.8)),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.8),
+        ),
       ),
       child: Row(
         children: List.generate(labels.length, (i) {
@@ -213,23 +267,35 @@ class PillTabs extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => onChanged(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: selected ? activeColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: selected
-                      ? [BoxShadow(color: activeColor.withValues(alpha: 0.22), blurRadius: 14, offset: const Offset(0, 6))]
-                      : null,
-                ),
-                child: Text(
-                  labels[i],
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: selected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 46),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 170),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected ? activeColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: activeColor.withValues(alpha: 0.16),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    labels[i],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: selected
+                          ? Colors.white
+                          : Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
                   ),
                 ),
               ),
@@ -250,6 +316,7 @@ class EntryRow extends StatelessWidget {
     this.onCategoryTap,
     this.onContentTap,
     this.onAmountTap,
+    this.onAmountTapAt,
     this.onLongPress,
   });
 
@@ -259,6 +326,7 @@ class EntryRow extends StatelessWidget {
   final VoidCallback? onCategoryTap;
   final VoidCallback? onContentTap;
   final VoidCallback? onAmountTap;
+  final ValueChanged<Offset>? onAmountTapAt;
   final VoidCallback? onLongPress;
 
   @override
@@ -270,16 +338,18 @@ class EntryRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onLongPress: onLongPress,
       child: SizedBox(
-        height: 66,
+        height: 68,
         child: Row(
           children: [
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: categoryTap,
               child: SizedBox(
-                width: 58,
-                height: 66,
-                child: Center(child: CategoryAvatar(category: entry.category, size: 46)),
+                width: 60,
+                height: 68,
+                child: Center(
+                  child: CategoryAvatar(category: entry.category, size: 46),
+                ),
               ),
             ),
             Expanded(
@@ -296,12 +366,18 @@ class EntryRow extends StatelessWidget {
                         entry.note.isEmpty ? entry.title : entry.note,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         '${entry.category} · ${entry.date.hour.toString().padLeft(2, '0')}:${entry.date.minute.toString().padLeft(2, '0')}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11.5),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(fontSize: 11.5),
                       ),
                     ],
                   ),
@@ -310,20 +386,25 @@ class EntryRow extends StatelessWidget {
             ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: amountTap,
+              onTap: onAmountTapAt == null ? amountTap : null,
+              onTapUp: onAmountTapAt == null
+                  ? null
+                  : (details) => onAmountTapAt!(details.globalPosition),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 74, minHeight: 66),
+                constraints: const BoxConstraints(minWidth: 86, minHeight: 68),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.only(left: 8, right: 2),
                     child: Text(
                       amountText,
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
-                        color: entry.isIncome ? AppPalette.mint : Theme.of(context).textTheme.bodyLarge?.color,
+                        color: entry.isIncome
+                            ? AppPalette.mint
+                            : Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
                   ),

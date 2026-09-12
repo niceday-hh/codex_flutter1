@@ -32,19 +32,36 @@ class _HomePageState extends State<HomePage> {
     setState(() => _month = DateTime(_month.year, _month.month + offset));
   }
 
+  void _returnToCurrentMonth() {
+    final now = DateTime.now();
+    HapticFeedback.selectionClick();
+    setState(() => _month = DateTime(now.year, now.month));
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = AppStoreScope.of(context);
     final items = store.entriesForMonth(_month);
-    final expense = store.expenseForMonth(_month);
-    final income = store.incomeForMonth(_month);
-    final groups = _groupByDay(items);
+    var expense = 0.0;
+    var income = 0.0;
+    for (final item in items) {
+      if (item.isIncome) {
+        income += item.amount;
+      } else {
+        expense += item.amount;
+      }
+    }
+    final groups = _groupByDay(items).entries.toList();
 
     return CustomScrollView(
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      key: const PageStorageKey<String>('home-scroll'),
+      cacheExtent: 720,
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 124),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               Row(
@@ -55,12 +72,18 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Text(
                           '拾光账本',
-                          style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 34),
+                          style: Theme.of(context)
+                              .textTheme
+                              .displaySmall
+                              ?.copyWith(fontSize: 34),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           '记录生活 · 让美好发生',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(letterSpacing: 1.2),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(letterSpacing: 1.2),
                         ),
                       ],
                     ),
@@ -68,53 +91,49 @@ class _HomePageState extends State<HomePage> {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _showSearch(context, store),
-                    child: Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.72),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.8)),
+                    child: SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: Center(
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withValues(alpha: 0.76),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .dividerColor
+                                  .withValues(alpha: 0.8),
+                            ),
+                          ),
+                          child: const Icon(Icons.search_rounded, size: 26),
+                        ),
                       ),
-                      child: const Icon(Icons.search_rounded, size: 27),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 22),
               MonthSwitcher(
                 month: _month,
                 onPrevious: () => _moveMonth(-1),
                 onNext: () => _moveMonth(1),
               ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
                 child: _isCurrentMonth
-                    ? const SizedBox(height: 16)
+                    ? const SizedBox(key: ValueKey('current'), height: 16)
                     : Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        key: const ValueKey('return'),
+                        padding: const EdgeInsets.only(top: 10, bottom: 6),
                         child: Center(
-                          child: GestureDetector(
-                            onTap: () {
-                              final now = DateTime.now();
-                              setState(() => _month = DateTime(now.year, now.month));
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppPalette.primarySoft,
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.calendar_month_rounded, size: 17, color: AppPalette.primaryDeep),
-                                  SizedBox(width: 7),
-                                  Text('回到本月', style: TextStyle(fontWeight: FontWeight.w800, color: AppPalette.primaryDeep)),
-                                ],
-                              ),
-                            ),
+                          child: _ReturnChip(
+                            label: '回到本月',
+                            onTap: _returnToCurrentMonth,
                           ),
                         ),
                       ),
@@ -123,86 +142,155 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.fromLTRB(18, 19, 18, 18),
                 child: Row(
                   children: [
-                    Expanded(child: _SummaryCell(label: '${_month.month}月支出', value: store.displayMoney(expense), color: null)),
+                    Expanded(
+                      child: _SummaryCell(
+                        label: '${_month.month}月支出',
+                        value: store.displayMoney(expense),
+                        color: null,
+                      ),
+                    ),
                     _divider(context),
-                    Expanded(child: _SummaryCell(label: '收入', value: store.displayMoney(income), color: AppPalette.mint)),
+                    Expanded(
+                      child: _SummaryCell(
+                        label: '收入',
+                        value: store.displayMoney(income),
+                        color: AppPalette.mint,
+                      ),
+                    ),
                     _divider(context),
-                    Expanded(child: _SummaryCell(label: '结余', value: store.displayMoney(income - expense), color: AppPalette.primaryDeep)),
+                    Expanded(
+                      child: _SummaryCell(
+                        label: '结余',
+                        value: store.displayMoney(income - expense),
+                        color: AppPalette.primaryDeep,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 22),
-              if (items.isEmpty)
-                _EmptyMonth(month: _month)
-              else ...[
-                const SectionTitle(title: '账单明细'),
-                const SizedBox(height: 10),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  child: Column(
-                    key: ValueKey('${_month.year}-${_month.month}-${items.length}'),
-                    children: groups.entries.map((group) {
-                      final dayItems = group.value;
-                      final date = dayItems.first.date;
-                      final dayExpense = dayItems.where((e) => !e.isIncome).fold<double>(0, (sum, e) => sum + e.amount);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${date.month.toString().padLeft(2, '0')}月${date.day.toString().padLeft(2, '0')}日  ${_weekday(date.weekday)}',
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
-                                    ),
-                                  ),
-                                  if (dayExpense > 0)
-                                    Text(
-                                      '支出 ${store.displayMoney(dayExpense)}',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            WarmCard(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                              child: Column(
-                                children: [
-                                  for (var i = 0; i < dayItems.length; i++) ...[
-                                    EntryRow(
-                                      key: ValueKey(dayItems[i].id),
-                                      entry: dayItems[i],
-                                      amountText: dayItems[i].isIncome
-                                          ? store.displayMoney(dayItems[i].amount, signed: true)
-                                          : store.hideAmounts
-                                              ? '••••'
-                                              : '-${store.displayMoney(dayItems[i].amount)}',
-                                      onCategoryTap: () => _editCategory(context, store, dayItems[i]),
-                                      onContentTap: () => _editName(context, store, dayItems[i]),
-                                      onAmountTap: () => _editAmount(context, store, dayItems[i]),
-                                      onLongPress: () => _showEntryActions(context, store, dayItems[i]),
-                                    ),
-                                    if (i != dayItems.length - 1)
-                                      Divider(height: 1, indent: 58, color: Theme.of(context).dividerColor),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
             ]),
           ),
         ),
+        if (items.isEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+            sliver: SliverToBoxAdapter(child: _EmptyMonth(month: _month)),
+          )
+        else ...[
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+            sliver: SliverToBoxAdapter(
+              child: SectionTitle(title: '账单明细'),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, groupIndex) {
+                  final group = groups[groupIndex];
+                  final dayItems = group.value;
+                  final date = dayItems.first.date;
+                  final dayExpense = dayItems
+                      .where((entry) => !entry.isIncome)
+                      .fold<double>(0, (sum, entry) => sum + entry.amount);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 5,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${date.month.toString().padLeft(2, '0')}月${date.day.toString().padLeft(2, '0')}日  ${_weekday(date.weekday)}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              if (dayExpense > 0)
+                                Text(
+                                  '支出 ${store.displayMoney(dayExpense)}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(fontSize: 12),
+                                ),
+                            ],
+                          ),
+                        ),
+                        RepaintBoundary(
+                          child: WarmCard(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 4,
+                            ),
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < dayItems.length; i++) ...[
+                                  EntryRow(
+                                    key: ValueKey(dayItems[i].id),
+                                    entry: dayItems[i],
+                                    amountText: _amountText(store, dayItems[i]),
+                                    onCategoryTap: () => _editCategory(
+                                      context,
+                                      store,
+                                      dayItems[i],
+                                    ),
+                                    onContentTap: () => _editNote(
+                                      context,
+                                      store,
+                                      dayItems[i],
+                                    ),
+                                    onAmountTapAt: (position) => _editAmountPopover(
+                                      context,
+                                      store,
+                                      dayItems[i],
+                                      position,
+                                    ),
+                                    onLongPress: () => _showEntryActions(
+                                      context,
+                                      store,
+                                      dayItems[i],
+                                    ),
+                                  ),
+                                  if (i != dayItems.length - 1)
+                                    Divider(
+                                      height: 1,
+                                      indent: 60,
+                                      color: Theme.of(context).dividerColor,
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                childCount: groups.length,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: true,
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  String _amountText(AppStore store, LedgerEntry entry) {
+    if (entry.isIncome) return store.displayMoney(entry.amount, signed: true);
+    if (store.hideAmounts) return '••••';
+    return '-${store.displayMoney(entry.amount)}';
   }
 
   Widget _divider(BuildContext context) => Container(
@@ -221,68 +309,37 @@ class _HomePageState extends State<HomePage> {
     return map;
   }
 
-  Future<void> _editCategory(BuildContext context, AppStore store, LedgerEntry entry) async {
+  List<String> _recentCategories(AppStore store, bool income) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final entry in store.entries) {
+      if (entry.isIncome != income || !seen.add(entry.category)) continue;
+      result.add(entry.category);
+      if (result.length >= 6) break;
+    }
+    return result;
+  }
+
+  Future<void> _editCategory(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+  ) async {
     HapticFeedback.selectionClick();
     final categories = entry.isIncome ? incomeCategories : expenseCategories;
     final selected = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.68,
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('修改分类', style: Theme.of(context).textTheme.titleLarge)),
-                    Text(entry.isIncome ? '收入' : '支出', style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: categories.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5,
-                    mainAxisExtent: 80,
-                    crossAxisSpacing: 5,
-                    mainAxisSpacing: 5,
-                  ),
-                  itemBuilder: (_, index) {
-                    final category = categories[index];
-                    final selected = category == entry.category;
-                    return GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => Navigator.of(sheetContext).pop(category),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CategoryAvatar(category: category, size: 49, selected: selected),
-                          const SizedBox(height: 5),
-                          Text(
-                            category,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                              color: selected ? colorForCategory(category) : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+        heightFactor: 0.74,
+        child: _CategoryPickerSheet(
+          categories: categories,
+          current: entry.category,
+          recent: _recentCategories(store, entry.isIncome),
+          income: entry.isIncome,
         ),
       ),
     );
@@ -291,120 +348,111 @@ class _HomePageState extends State<HomePage> {
     HapticFeedback.lightImpact();
   }
 
-  Future<void> _editName(BuildContext context, AppStore store, LedgerEntry entry) async {
+  Future<void> _editNote(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+  ) async {
     HapticFeedback.selectionClick();
     final initial = entry.note.isNotEmpty ? entry.note : entry.title;
-    final controller = TextEditingController(text: initial);
-    controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
     final value = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('修改名称 / 备注', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text('这里的内容也会写入 CSV 的“备注”列', style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              maxLength: 80,
-              onSubmitted: (value) => Navigator.of(sheetContext).pop(value),
-              decoration: InputDecoration(
-                hintText: '例如：小象买菜、地铁卡充值…',
-                filled: true,
-                fillColor: Theme.of(context).scaffoldBackgroundColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton(
-                onPressed: () => Navigator.of(sheetContext).pop(controller.text),
-                style: FilledButton.styleFrom(backgroundColor: AppPalette.primary, foregroundColor: AppPalette.ink),
-                child: const Text('保存修改', style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
+      builder: (_) => _NoteEditorSheet(
+        initial: initial,
+        category: entry.category,
+        recentNotes: store.notesForCategory(
+          entry.category,
+          income: entry.isIncome,
         ),
       ),
     );
-    controller.dispose();
     if (value == null) return;
     final clean = value.trim();
-    store.updateEntry(entry.id, title: clean.isEmpty ? entry.category : clean, note: clean);
+    store.updateEntry(
+      entry.id,
+      title: clean.isEmpty ? entry.category : clean,
+      note: clean,
+    );
     HapticFeedback.lightImpact();
   }
 
-  Future<void> _editAmount(BuildContext context, AppStore store, LedgerEntry entry) async {
+  Future<void> _editAmountPopover(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+    Offset anchor,
+  ) async {
     HapticFeedback.selectionClick();
-    final controller = TextEditingController(text: _trimAmount(entry.amount));
-    controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-    final value = await showModalBottomSheet<String>(
+    final value = await showGeneralDialog<String>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('修改金额', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              textInputAction: TextInputAction.done,
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-              onSubmitted: (value) => Navigator.of(sheetContext).pop(value),
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-              decoration: InputDecoration(
-                prefixText: '¥ ',
-                filled: true,
-                fillColor: Theme.of(context).scaffoldBackgroundColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+      barrierDismissible: true,
+      barrierLabel: '关闭金额编辑',
+      barrierColor: Colors.black.withValues(alpha: 0.16),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final size = MediaQuery.sizeOf(dialogContext);
+        final padding = MediaQuery.paddingOf(dialogContext);
+        final width = (size.width - 28).clamp(286.0, 332.0).toDouble();
+        const cardHeight = 414.0;
+        final minTop = padding.top + 8;
+        final maxTop = size.height - padding.bottom - cardHeight - 8;
+        final preferredTop = anchor.dy < size.height * 0.55
+            ? anchor.dy + 10
+            : anchor.dy - cardHeight - 10;
+        final top = maxTop <= minTop
+            ? minTop
+            : preferredTop.clamp(minTop, maxTop).toDouble();
+        final maxLeft = size.width - width - 14;
+        final left = (anchor.dx - width + 50)
+            .clamp(14.0, maxLeft < 14 ? 14.0 : maxLeft)
+            .toDouble();
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: width,
+                child: _AmountQuickEditor(
+                  initial: _trimAmount(entry.amount),
+                  isIncome: entry.isIncome,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton(
-                onPressed: () => Navigator.of(sheetContext).pop(controller.text),
-                style: FilledButton.styleFrom(backgroundColor: AppPalette.primary, foregroundColor: AppPalette.ink),
-                child: const Text('保存金额', style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.97, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
-    controller.dispose();
     if (value == null) return;
-    final amount = double.tryParse(value.trim());
-    if (amount == null || amount <= 0) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入大于 0 的有效金额')));
-      }
-      return;
-    }
+    final amount = double.tryParse(value);
+    if (amount == null || amount <= 0) return;
     store.updateEntry(entry.id, amount: amount);
     HapticFeedback.lightImpact();
   }
 
-  Future<void> _showEntryActions(BuildContext context, AppStore store, LedgerEntry entry) async {
+  Future<void> _showEntryActions(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+  ) async {
     HapticFeedback.mediumImpact();
     final action = await showModalBottomSheet<_EntryAction>(
       context: context,
@@ -427,21 +475,54 @@ class _HomePageState extends State<HomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(entry.note.isEmpty ? entry.title : entry.note, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(
+                            entry.note.isEmpty ? entry.title : entry.note,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
                           const SizedBox(height: 2),
-                          Text('${entry.category} · ${store.displayMoney(entry.amount)}', style: Theme.of(context).textTheme.bodySmall),
+                          Text(
+                            '${entry.category} · ${store.displayMoney(entry.amount)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              _EntryActionTile(icon: Icons.category_rounded, label: '修改分类', onTap: () => Navigator.of(sheetContext).pop(_EntryAction.category)),
-              _EntryActionTile(icon: Icons.edit_note_rounded, label: '修改名称 / 备注', onTap: () => Navigator.of(sheetContext).pop(_EntryAction.name)),
-              _EntryActionTile(icon: Icons.payments_outlined, label: '修改金额', onTap: () => Navigator.of(sheetContext).pop(_EntryAction.amount)),
-              _EntryActionTile(icon: Icons.info_outline_rounded, label: '查看完整记录', onTap: () => Navigator.of(sheetContext).pop(_EntryAction.detail)),
+              _EntryActionTile(
+                icon: Icons.category_rounded,
+                label: '修改分类',
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(_EntryAction.category),
+              ),
+              _EntryActionTile(
+                icon: Icons.edit_note_rounded,
+                label: '修改名称 / 备注',
+                onTap: () => Navigator.of(sheetContext).pop(_EntryAction.note),
+              ),
+              _EntryActionTile(
+                icon: Icons.payments_outlined,
+                label: '修改金额',
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(_EntryAction.amount),
+              ),
+              _EntryActionTile(
+                icon: Icons.info_outline_rounded,
+                label: '查看完整记录',
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(_EntryAction.detail),
+              ),
               Divider(color: Theme.of(context).dividerColor),
-              _EntryActionTile(icon: Icons.delete_outline_rounded, label: '删除记录', danger: true, onTap: () => Navigator.of(sheetContext).pop(_EntryAction.delete)),
+              _EntryActionTile(
+                icon: Icons.delete_outline_rounded,
+                label: '删除记录',
+                danger: true,
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(_EntryAction.delete),
+              ),
             ],
           ),
         ),
@@ -452,11 +533,17 @@ class _HomePageState extends State<HomePage> {
       case _EntryAction.category:
         await _editCategory(context, store, entry);
         break;
-      case _EntryAction.name:
-        await _editName(context, store, entry);
+      case _EntryAction.note:
+        await _editNote(context, store, entry);
         break;
       case _EntryAction.amount:
-        await _editAmount(context, store, entry);
+        final size = MediaQuery.sizeOf(context);
+        await _editAmountPopover(
+          context,
+          store,
+          entry,
+          Offset(size.width - 42, size.height * 0.42),
+        );
         break;
       case _EntryAction.detail:
         await _showEntryDetail(context, store, entry);
@@ -467,14 +554,23 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, AppStore store, LedgerEntry entry) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除这笔记录？'),
-        content: Text('“${entry.note.isEmpty ? entry.title : entry.note}” 删除后无法撤销。'),
+        content: Text(
+          '“${entry.note.isEmpty ? entry.title : entry.note}” 删除后无法撤销。',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppPalette.danger),
@@ -488,7 +584,11 @@ class _HomePageState extends State<HomePage> {
     HapticFeedback.heavyImpact();
   }
 
-  Future<void> _showEntryDetail(BuildContext context, AppStore store, LedgerEntry entry) async {
+  Future<void> _showEntryDetail(
+    BuildContext context,
+    AppStore store,
+    LedgerEntry entry,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -500,16 +600,29 @@ class _HomePageState extends State<HomePage> {
           children: [
             CategoryAvatar(category: entry.category, size: 62),
             const SizedBox(height: 12),
-            Text(entry.note.isEmpty ? entry.title : entry.note, style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              entry.note.isEmpty ? entry.title : entry.note,
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 6),
-            Text('${entry.category} · ${entry.isIncome ? '收入' : '支出'}', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '${entry.category} · ${entry.isIncome ? '收入' : '支出'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 16),
             Text(
               store.displayMoney(entry.amount),
-              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: entry.isIncome ? AppPalette.mint : null),
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w900,
+                color: entry.isIncome ? AppPalette.mint : null,
+              ),
             ),
             const SizedBox(height: 12),
-            Text('${entry.date.year}/${entry.date.month}/${entry.date.day} ${entry.date.hour.toString().padLeft(2, '0')}:${entry.date.minute.toString().padLeft(2, '0')}'),
+            Text(
+              '${entry.date.year}/${entry.date.month}/${entry.date.day} ${entry.date.hour.toString().padLeft(2, '0')}:${entry.date.minute.toString().padLeft(2, '0')}',
+            ),
           ],
         ),
       ),
@@ -527,10 +640,565 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-enum _EntryAction { category, name, amount, detail, delete }
+enum _EntryAction { category, note, amount, detail, delete }
+
+class _ReturnChip extends StatelessWidget {
+  const _ReturnChip({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 42),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppPalette.primarySoft,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.my_location_rounded,
+              size: 17,
+              color: AppPalette.primaryDeep,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: AppPalette.primaryDeep,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryPickerSheet extends StatefulWidget {
+  const _CategoryPickerSheet({
+    required this.categories,
+    required this.current,
+    required this.recent,
+    required this.income,
+  });
+
+  final List<String> categories;
+  final String current;
+  final List<String> recent;
+  final bool income;
+
+  @override
+  State<_CategoryPickerSheet> createState() => _CategoryPickerSheetState();
+}
+
+class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.categories
+        .where((category) => category.contains(_query.trim()))
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '修改分类',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              Text(
+                widget.income ? '收入' : '支出',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: TextField(
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search_rounded),
+              hintText: '搜索分类',
+              filled: true,
+              fillColor: Theme.of(context).scaffoldBackgroundColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+        if (_query.isEmpty && widget.recent.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+            child: Text(
+              '最近使用',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              physics: const BouncingScrollPhysics(),
+              itemCount: widget.recent.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final category = widget.recent[index];
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).pop(category),
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 82),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: category == widget.current
+                          ? colorForCategory(category).withValues(alpha: 0.18)
+                          : Theme.of(context).scaffoldBackgroundColor,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(emojiForCategory(category)),
+                        const SizedBox(width: 7),
+                        Text(
+                          category,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+          child: Text(
+            _query.isEmpty ? '全部分类' : '搜索结果',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    '没有找到分类',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: filtered.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 5,
+                    mainAxisExtent: 82,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
+                  itemBuilder: (context, index) {
+                    final category = filtered[index];
+                    final selected = category == widget.current;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.of(context).pop(category),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CategoryAvatar(
+                            category: category,
+                            size: 48,
+                            selected: selected,
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: selected
+                                  ? FontWeight.w900
+                                  : FontWeight.w700,
+                              color: selected
+                                  ? colorForCategory(category)
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoteEditorSheet extends StatefulWidget {
+  const _NoteEditorSheet({
+    required this.initial,
+    required this.category,
+    required this.recentNotes,
+  });
+
+  final String initial;
+  final String category;
+  final List<String> recentNotes;
+
+  @override
+  State<_NoteEditorSheet> createState() => _NoteEditorSheetState();
+}
+
+class _NoteEditorSheetState extends State<_NoteEditorSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial);
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _useNote(String value) {
+    _controller.text = value;
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final recent = widget.recentNotes
+        .where((note) => note != widget.initial)
+        .take(10)
+        .toList();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '修改名称 / 备注',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorForCategory(widget.category)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    widget.category,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: colorForCategory(widget.category),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              '同分类最近使用的备注可以一键复用',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (recent.isNotEmpty) ...[
+              const SizedBox(height: 13),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: recent
+                    .map(
+                      (note) => ActionChip(
+                        label: Text(
+                          note,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: () => _useNote(note),
+                        backgroundColor:
+                            Theme.of(context).scaffoldBackgroundColor,
+                        side: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 14),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              maxLength: 80,
+              onSubmitted: (value) => Navigator.of(context).pop(value),
+              decoration: InputDecoration(
+                hintText: '输入名称或备注',
+                filled: true,
+                fillColor: Theme.of(context).scaffoldBackgroundColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(_controller.text),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppPalette.primary,
+                  foregroundColor: AppPalette.ink,
+                ),
+                child: const Text(
+                  '保存修改',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AmountQuickEditor extends StatefulWidget {
+  const _AmountQuickEditor({
+    required this.initial,
+    required this.isIncome,
+  });
+
+  final String initial;
+  final bool isIncome;
+
+  @override
+  State<_AmountQuickEditor> createState() => _AmountQuickEditorState();
+}
+
+class _AmountQuickEditorState extends State<_AmountQuickEditor> {
+  late String _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.initial.isEmpty ? '0' : widget.initial;
+  }
+
+  void _press(String key) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (key == '⌫') {
+        if (_value.isNotEmpty) {
+          _value = _value.substring(0, _value.length - 1);
+        }
+        if (_value.isEmpty) _value = '0';
+        return;
+      }
+      if (key == '.') {
+        if (!_value.contains('.')) _value = '$_value.';
+        return;
+      }
+      final dot = _value.indexOf('.');
+      if (dot >= 0 && _value.length - dot > 2) return;
+      if (_value == '0') {
+        _value = key;
+      } else if (_value.replaceAll('.', '').length < 9) {
+        _value += key;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isIncome ? AppPalette.mint : AppPalette.primary;
+    final amount = double.tryParse(_value) ?? 0;
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: 414,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.16),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '快捷修改金额',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).pop(),
+                  child: const SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(Icons.close_rounded),
+                  ),
+                ),
+              ],
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text(
+                '¥ $_value',
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.8,
+                  color: widget.isIncome ? AppPalette.mint : null,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: GridView.builder(
+                padding: EdgeInsets.zero,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: keys.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 7,
+                  crossAxisSpacing: 7,
+                  childAspectRatio: 1.85,
+                ),
+                itemBuilder: (context, index) {
+                  final key = keys[index];
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _press(key),
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: key == '⌫'
+                            ? accent.withValues(alpha: 0.10)
+                            : Theme.of(context).scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: key == '⌫'
+                          ? const Icon(Icons.backspace_outlined, size: 21)
+                          : Text(
+                              key,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: amount > 0
+                    ? () => Navigator.of(context).pop(_value)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  foregroundColor: widget.isIncome ? Colors.white : AppPalette.ink,
+                ),
+                child: const Text(
+                  '保存金额',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _EntryActionTile extends StatelessWidget {
-  const _EntryActionTile({required this.icon, required this.label, required this.onTap, this.danger = false});
+  const _EntryActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -538,22 +1206,32 @@ class _EntryActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppPalette.danger : Theme.of(context).textTheme.bodyLarge?.color;
+    final color = danger
+        ? AppPalette.danger
+        : Theme.of(context).textTheme.bodyLarge?.color;
     return ListTile(
-      minTileHeight: 56,
+      minTileHeight: 58,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       leading: Icon(icon, color: color),
-      title: Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+      title: Text(
+        label,
+        style: TextStyle(fontWeight: FontWeight.w800, color: color),
+      ),
       trailing: Icon(Icons.chevron_right_rounded, color: color),
       onTap: onTap,
     );
   }
 }
 
-String _trimAmount(double value) => value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+String _trimAmount(double value) =>
+    value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
 
 class _SummaryCell extends StatelessWidget {
-  const _SummaryCell({required this.label, required this.value, required this.color});
+  const _SummaryCell({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
   final String label;
   final String value;
   final Color? color;
@@ -563,14 +1241,22 @@ class _SummaryCell extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12)),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+        ),
         const SizedBox(height: 8),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
             value,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.6, color: color),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.6,
+              color: color,
+            ),
           ),
         ),
       ],
@@ -594,15 +1280,28 @@ class _EmptyMonth extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [AppPalette.primarySoft, AppPalette.primary.withValues(alpha: 0.08)],
+                colors: [
+                  AppPalette.primarySoft,
+                  AppPalette.primary.withValues(alpha: 0.08),
+                ],
               ),
             ),
-            child: const Icon(Icons.inventory_2_outlined, size: 50, color: AppPalette.primary),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 50,
+              color: AppPalette.primary,
+            ),
           ),
           const SizedBox(height: 22),
-          Text('${month.month}月还没有账单', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            '${month.month}月还没有账单',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 7),
-          Text('点击下方 + 开始记录', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 14)),
+          Text(
+            '点击下方 + 开始记录',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 14),
+          ),
         ],
       ),
     );
@@ -634,10 +1333,15 @@ class _SearchSheetState extends State<_SearchSheet> {
       return entry.category.toLowerCase().contains(query) ||
           entry.title.toLowerCase().contains(query) ||
           entry.note.toLowerCase().contains(query);
-    }).take(30).toList();
+    }).take(40).toList();
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(18, 0, 18, MediaQuery.viewInsetsOf(context).bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+        18,
+        0,
+        18,
+        MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.72,
         child: Column(
@@ -651,23 +1355,38 @@ class _SearchSheetState extends State<_SearchSheet> {
                 hintText: '搜索分类、备注或账单名称',
                 filled: true,
                 fillColor: Theme.of(context).scaffoldBackgroundColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
             const SizedBox(height: 12),
             Expanded(
               child: results.isEmpty
-                  ? Center(child: Text('没有找到相关账单', style: Theme.of(context).textTheme.bodySmall))
+                  ? Center(
+                      child: Text(
+                        '没有找到相关账单',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    )
                   : ListView.separated(
+                      cacheExtent: 520,
                       physics: const BouncingScrollPhysics(),
                       itemCount: results.length,
-                      separatorBuilder: (_, __) => Divider(indent: 58, color: Theme.of(context).dividerColor),
+                      separatorBuilder: (_, __) => Divider(
+                        indent: 60,
+                        color: Theme.of(context).dividerColor,
+                      ),
                       itemBuilder: (_, index) {
                         final entry = results[index];
                         return EntryRow(
                           entry: entry,
                           amountText: entry.isIncome
-                              ? widget.store.displayMoney(entry.amount, signed: true)
+                              ? widget.store.displayMoney(
+                                  entry.amount,
+                                  signed: true,
+                                )
                               : widget.store.hideAmounts
                                   ? '••••'
                                   : '-${widget.store.displayMoney(entry.amount)}',
@@ -683,6 +1402,14 @@ class _SearchSheetState extends State<_SearchSheet> {
 }
 
 String _weekday(int weekday) {
-  const names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
+  const names = [
+    '星期一',
+    '星期二',
+    '星期三',
+    '星期四',
+    '星期五',
+    '星期六',
+    '星期日',
+  ];
   return names[weekday - 1];
 }

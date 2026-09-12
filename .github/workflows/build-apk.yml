@@ -120,9 +120,15 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -z "$RELEASE_TOKEN" ]]; then
+            echo "RELEASE_TOKEN is not configured."
+            exit 1
+          fi
+
           mkdir -p "$RUNNER_TEMP/releases/v01" "$RUNNER_TEMP/releases/v20"
           gh api /repos/${{ github.repository }}/actions/artifacts/10178062807/zip > "$RUNNER_TEMP/v01.zip"
           gh api /repos/${{ github.repository }}/actions/artifacts/10271082903/zip > "$RUNNER_TEMP/v20.zip"
@@ -160,6 +166,8 @@ jobs:
           **首次从 v0.1.0 / v2.0.0 迁移：**请先导出 CSV → 卸载旧版 → 安装此版本 → 导入 CSV。只需要这一次。
           NOTES
 
+          export GH_TOKEN="$RELEASE_TOKEN"
+
           ensure_release() {
             local tag="$1" target="$2" title="$3" notes="$4" asset="$5"
             if gh release view "$tag" >/dev/null 2>&1; then
@@ -173,5 +181,3 @@ jobs:
           ensure_release v0.1.0 4eff33b1a7b209ef34de6c8374370efbbc492dac '拾光账本 v0.1.0' "$RUNNER_TEMP/v01.md" "$RUNNER_TEMP/拾光账本-v0.1.0-arm64.apk"
           ensure_release v2.0.0 2edf9ed2a3fedebe9ca95eab786cf7e3ca8865b6 '拾光账本 v2.0.0' "$RUNNER_TEMP/v20.md" "$RUNNER_TEMP/拾光账本-v2.0.0-arm64.apk"
           ensure_release v2.1.0 "$GITHUB_SHA" '拾光账本 v2.1.0 · 长期签名版' "$RUNNER_TEMP/v21.md" "$V21_SRC"
-
-# Trigger: fixed-signing secrets configured

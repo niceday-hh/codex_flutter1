@@ -54,7 +54,7 @@ class _StatsPageState extends State<StatsPage> {
 
     return CustomScrollView(
       key: const PageStorageKey<String>('stats-v23-scroll'),
-      scrollCacheExtent: 720,
+      cacheExtent: 720,
       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       slivers: [
         SliverPadding(
@@ -554,7 +554,7 @@ class _StatsPageState extends State<StatsPage> {
                         child: Text('当前节点暂无明细', style: Theme.of(context).textTheme.bodySmall),
                       )
                     : ListView.separated(
-                        scrollCacheExtent: 520,
+                        cacheExtent: 520,
                         physics: const BouncingScrollPhysics(),
                         itemCount: entries.length,
                         separatorBuilder: (_, __) => Divider(

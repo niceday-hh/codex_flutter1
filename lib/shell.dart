@@ -64,29 +64,16 @@ class _AppShellState extends State<AppShell> {
           ),
           SafeArea(
             bottom: false,
-            child: Stack(
-              fit: StackFit.expand,
-              children: List.generate(_pages.length, (pageIndex) {
-                final active = pageIndex == _index;
-                return IgnorePointer(
-                  ignoring: !active,
-                  child: TickerMode(
-                    enabled: active,
-                    child: AnimatedOpacity(
-                      opacity: active ? 1 : 0,
-                      duration: const Duration(milliseconds: 145),
-                      curve: Curves.easeOutCubic,
-                      child: AnimatedScale(
-                        scale: active ? 1 : 0.995,
-                        duration: const Duration(milliseconds: 145),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment.center,
-                        child: _pages[pageIndex],
-                      ),
-                    ),
-                  ),
-                );
-              }),
+            child: IndexedStack(
+              index: _index,
+              sizing: StackFit.expand,
+              children: List.generate(
+                _pages.length,
+                (pageIndex) => TickerMode(
+                  enabled: pageIndex == _index,
+                  child: _pages[pageIndex],
+                ),
+              ),
             ),
           ),
         ],

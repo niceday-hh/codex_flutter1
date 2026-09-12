@@ -1,53 +1,156 @@
-name: Build Android APK
+name: Build & Release Android APK
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check signing configuration
+        id: signing
+        shell: bash
+        run: |
+          if [[ -n "$KEYSTORE_B64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Long-term signing secrets detected."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets are not configured yet; build/release steps will be skipped."
+          fi
+
       - name: Set up Java 17
+        if: steps.signing.outputs.ready == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Flutter stable
+        if: steps.signing.outputs.ready == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Rebuild v2.1 source archive
-        run: cat source/v21/*.txt | base64 -d > /tmp/smart_budget_v21.zip
-      - name: Verify v2.1 source archive
-        run: |
-          echo "1e444f0442c29bfa1cd7fd70c2a8ea37c93945facfa48a781c83289166f08ae2  /tmp/smart_budget_v21.zip" | sha256sum -c -
-          unzip -t /tmp/smart_budget_v21.zip
-      - name: Unpack v2.1 source
-        run: unzip -q /tmp/smart_budget_v21.zip
+
       - name: Create Android host
-        working-directory: smart_budget_flutter
+        if: steps.signing.outputs.ready == 'true'
         run: bash ./tool/bootstrap_android.sh
+
       - name: Resolve dependencies
-        working-directory: smart_budget_flutter
+        if: steps.signing.outputs.ready == 'true'
         run: flutter pub get
+
       - name: Analyze
-        working-directory: smart_budget_flutter
+        if: steps.signing.outputs.ready == 'true'
         run: flutter analyze --no-fatal-infos
+
       - name: Test
-        working-directory: smart_budget_flutter
+        if: steps.signing.outputs.ready == 'true'
         run: flutter test
-      - name: Build ARM64 release APK
-        working-directory: smart_budget_flutter
+
+      - name: Build ARM64 APK
+        if: steps.signing.outputs.ready == 'true'
         run: flutter build apk --release --target-platform android-arm64
-      - name: Upload APK
+
+      - name: Apply fixed long-term signature
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/shiguang-release.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -n "$APKSIGNER"
+          INPUT="build/app/outputs/flutter-apk/app-release.apk"
+          OUTPUT="build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk"
+          "$APKSIGNER" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out "$OUTPUT" \
+            "$INPUT"
+          "$APKSIGNER" verify --verbose --print-certs "$OUTPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
+          grep -qi '7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95' "$RUNNER_TEMP/apksigner-verify.txt"
+
+      - name: Upload fixed-signed APK
+        if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: shiguang-ledger-v2.1-arm64-release
-          path: smart_budget_flutter/build/app/outputs/flutter-apk/app-release.apk
+          name: shiguang-ledger-v2.1.0-fixed-signing-arm64
+          path: build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk
           if-no-files-found: error
+
+      - name: Publish historical and current Releases
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/releases/v01" "$RUNNER_TEMP/releases/v20"
+          gh api /repos/${{ github.repository }}/actions/artifacts/10178062807/zip > "$RUNNER_TEMP/v01.zip"
+          gh api /repos/${{ github.repository }}/actions/artifacts/10271082903/zip > "$RUNNER_TEMP/v20.zip"
+          unzip -q "$RUNNER_TEMP/v01.zip" -d "$RUNNER_TEMP/releases/v01"
+          unzip -q "$RUNNER_TEMP/v20.zip" -d "$RUNNER_TEMP/releases/v20"
+
+          V01_SRC="$(find "$RUNNER_TEMP/releases/v01" -type f -name '*.apk' | head -1)"
+          V20_SRC="$(find "$RUNNER_TEMP/releases/v20" -type f -name '*.apk' | head -1)"
+          V21_SRC="build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk"
+          cp "$V01_SRC" "$RUNNER_TEMP/拾光账本-v0.1.0-arm64.apk"
+          cp "$V20_SRC" "$RUNNER_TEMP/拾光账本-v2.0.0-arm64.apk"
+
+          cat > "$RUNNER_TEMP/v01.md" <<'NOTES'
+          ## 拾光账本 v0.1.0
+          首个 Flutter Android 原型版本：完成基础首页、记账、账单、图表与本地持久化框架，并针对荣耀 100 / ARM64 构建。
+
+          > 该历史版本使用当次云 Runner 的临时签名，只用于历史留档。不能直接覆盖升级到长期签名版本。
+          NOTES
+
+          cat > "$RUNNER_TEMP/v20.md" <<'NOTES'
+          ## 拾光账本 v2.0.0
+          UI 与功能大幅升级：明细按月查看、报表趋势节点与分类钻取、预算页、我的页、完整支出/收入分类、常用备注，以及 CSV 导入导出。
+
+          > 该历史版本使用临时云签名。迁移到 v2.1.0 长期签名版前，请先导出 CSV，卸载旧版后再安装 v2.1.0，并导入 CSV。之后的版本可以直接覆盖升级。
+          NOTES
+
+          cat > "$RUNNER_TEMP/v21.md" <<'NOTES'
+          ## 拾光账本 v2.1.0 · 长期签名起点
+          - 明细页取消左滑直接删除；分类、名称/备注、金额支持分区快捷编辑。
+          - 长按账单进入管理菜单，删除增加二次确认。
+          - 报表排行榜和分类构成扩大整行/整卡触控范围。
+          - 常用按钮热区针对荣耀 100 大屏单手操作优化。
+          - 从本版本开始启用固定长期 Android 签名，后续只要 versionCode 递增即可直接覆盖升级。
+
+          **首次从 v0.1.0 / v2.0.0 迁移：**请先导出 CSV → 卸载旧版 → 安装此版本 → 导入 CSV。只需要这一次。
+          NOTES
+
+          ensure_release() {
+            local tag="$1" target="$2" title="$3" notes="$4" asset="$5"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release edit "$tag" --title "$title" --notes-file "$notes"
+            else
+              gh release create "$tag" --target "$target" --title "$title" --notes-file "$notes"
+            fi
+            gh release upload "$tag" "$asset" --clobber
+          }
+
+          ensure_release v0.1.0 4eff33b1a7b209ef34de6c8374370efbbc492dac '拾光账本 v0.1.0' "$RUNNER_TEMP/v01.md" "$RUNNER_TEMP/拾光账本-v0.1.0-arm64.apk"
+          ensure_release v2.0.0 2edf9ed2a3fedebe9ca95eab786cf7e3ca8865b6 '拾光账本 v2.0.0' "$RUNNER_TEMP/v20.md" "$RUNNER_TEMP/拾光账本-v2.0.0-arm64.apk"
+          ensure_release v2.1.0 "$GITHUB_SHA" '拾光账本 v2.1.0 · 长期签名版' "$RUNNER_TEMP/v21.md" "$V21_SRC"

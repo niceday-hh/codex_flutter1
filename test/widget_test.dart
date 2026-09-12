@@ -7,11 +7,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('拾光账本'), findsOneWidget);
-    expect(find.text('明细'), findsOneWidget);
-    // v2.3 keeps tab pages mounted for fast switching, so the report page title
-    // and bottom navigation label may both exist in the widget tree.
-    expect(find.text('报表'), findsAtLeastNWidgets(1));
-    expect(find.text('预算'), findsOneWidget);
-    expect(find.text('我的'), findsOneWidget);
+
+    // v2.3 keeps all primary pages mounted so tab switching is immediate and
+    // scroll state is preserved. Page headings can therefore coexist with the
+    // matching bottom-navigation labels in the widget tree.
+    for (final label in const ['明细', '报表', '预算', '我的']) {
+      expect(find.text(label), findsAtLeastNWidgets(1));
+    }
   });
 }

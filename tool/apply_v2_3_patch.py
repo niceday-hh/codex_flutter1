@@ -110,4 +110,17 @@ elif 'children: List.generate(_pages.length, (pageIndex)' not in text:
     raise SystemExit('Patch target not found: animated tab stack')
 shell.write_text(text)
 
+# Flutter 3.47 introduced a typed ScrollCacheExtent. Keep the proven numeric
+# cacheExtent form for this project; it is an info-level deprecation only.
+stats = Path('lib/pages/stats_page_v23.dart')
+text = stats.read_text()
+text = text.replace('scrollCacheExtent: 720,', 'cacheExtent: 720,')
+text = text.replace('scrollCacheExtent: 520,', 'cacheExtent: 520,')
+stats.write_text(text)
+
+# The report donut is intentionally self-contained and does not need app_theme.
+donut = Path('lib/widgets/report_donut.dart')
+text = donut.read_text().replace("import '../app_theme.dart';\n", '')
+donut.write_text(text)
+
 print('v2.3.0 source patches applied successfully.')

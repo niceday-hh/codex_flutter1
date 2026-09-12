@@ -1,0 +1,338 @@
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import '../app_theme.dart';
+import '../models.dart';
+
+class WarmCard extends StatelessWidget {
+  const WarmCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.margin,
+    this.radius = 24,
+    this.onTap,
+    this.gradient,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+  final EdgeInsets? margin;
+  final double radius;
+  final VoidCallback? onTap;
+  final Gradient? gradient;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final card = Container(
+      margin: margin,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: gradient == null ? Theme.of(context).colorScheme.surface.withValues(alpha: dark ? 0.94 : 0.96) : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: dark ? Colors.white.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.95),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: dark ? Colors.black.withValues(alpha: 0.18) : const Color(0xFF8A6B38).withValues(alpha: 0.08),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: child,
+    );
+    if (onTap == null) return card;
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: card);
+  }
+}
+
+class FrostedBar extends StatelessWidget {
+  const FrostedBar({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: (dark ? const Color(0xFF181B1E) : Colors.white).withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.08 : 0.92)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class CategoryAvatar extends StatelessWidget {
+  const CategoryAvatar({super.key, required this.category, this.size = 44, this.selected = false});
+
+  final String category;
+  final double size;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorForCategory(category);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? color : color.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        boxShadow: selected
+            ? [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 7))]
+            : null,
+      ),
+      child: Text(
+        emojiForCategory(category),
+        style: TextStyle(fontSize: size * 0.48),
+      ),
+    );
+  }
+}
+
+class SectionTitle extends StatelessWidget {
+  const SectionTitle({super.key, required this.title, this.trailing});
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class MonthSwitcher extends StatelessWidget {
+  const MonthSwitcher({
+    super.key,
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+    this.compact = false,
+  });
+
+  final DateTime month;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: compact ? 19 : 23);
+    return Row(
+      children: [
+        _RoundIcon(icon: Icons.chevron_left_rounded, onTap: onPrevious, compact: compact),
+        Expanded(
+          child: Text(
+            '${month.year}年 ${month.month}月',
+            textAlign: TextAlign.center,
+            style: style,
+          ),
+        ),
+        _RoundIcon(icon: Icons.chevron_right_rounded, onTap: onNext, compact: compact),
+      ],
+    );
+  }
+}
+
+class _RoundIcon extends StatelessWidget {
+  const _RoundIcon({required this.icon, required this.onTap, required this.compact});
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: compact ? 44 : 48,
+        height: compact ? 44 : 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+          shape: BoxShape.circle,
+          border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.7)),
+        ),
+        child: Icon(icon, size: compact ? 24 : 28),
+      ),
+    );
+  }
+}
+
+class PillTabs extends StatelessWidget {
+  const PillTabs({
+    super.key,
+    required this.labels,
+    required this.index,
+    required this.onChanged,
+    this.activeColor = AppPalette.primary,
+  });
+
+  final List<String> labels;
+  final int index;
+  final ValueChanged<int> onChanged;
+  final Color activeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.8)),
+      ),
+      child: Row(
+        children: List.generate(labels.length, (i) {
+          final selected = i == index;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: selected ? activeColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: selected
+                      ? [BoxShadow(color: activeColor.withValues(alpha: 0.22), blurRadius: 14, offset: const Offset(0, 6))]
+                      : null,
+                ),
+                child: Text(
+                  labels[i],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: selected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class EntryRow extends StatelessWidget {
+  const EntryRow({
+    super.key,
+    required this.entry,
+    required this.amountText,
+    this.onTap,
+    this.onCategoryTap,
+    this.onContentTap,
+    this.onAmountTap,
+    this.onLongPress,
+  });
+
+  final LedgerEntry entry;
+  final String amountText;
+  final VoidCallback? onTap;
+  final VoidCallback? onCategoryTap;
+  final VoidCallback? onContentTap;
+  final VoidCallback? onAmountTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final categoryTap = onCategoryTap ?? onTap;
+    final contentTap = onContentTap ?? onTap;
+    final amountTap = onAmountTap ?? onTap;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: SizedBox(
+        height: 66,
+        child: Row(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: categoryTap,
+              child: SizedBox(
+                width: 58,
+                height: 66,
+                child: Center(child: CategoryAvatar(category: entry.category, size: 46)),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: contentTap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 9, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        entry.note.isEmpty ? entry.title : entry.note,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${entry.category} · ${entry.date.hour.toString().padLeft(2, '0')}:${entry.date.minute.toString().padLeft(2, '0')}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: amountTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 74, minHeight: 66),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      amountText,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: entry.isIncome ? AppPalette.mint : Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,9 +1,32 @@
-# Smart Budget · Flutter Android
+# 拾光账本 2.1
 
-基于会话中的 Smart Budget UI 设计稿实现的 iOS 风记账 App 原型，面向荣耀 100 等 Android 高刷全面屏手机。当前仓库包含用于 GitHub Actions 云端构建的 Flutter 源码压缩包与工作流。
+面向荣耀 100 等 Android 高刷全面屏设备的 Flutter 记账 App。UI 采用暖橙、象牙白、薄荷绿，大圆角卡片、轻量玻璃质感、弹性滚动与触感反馈。
 
-## 云端 APK 构建
+## 主要功能
+- 明细：按月切换、回到本月、按日分组、搜索；点分类/备注/金额可快捷编辑，长按账单进入管理菜单并二次确认删除。
+- 报表：周/月/季度/年、支出/收入切换、趋势节点明细、分类构成与排行榜钻取；排行榜整行可点击。
+- 预算：月预算与分类预算，可直接调整。
+- 记一笔：支出/收入分类、自定义数字键盘、加减计算、日期、常用备注快捷选择。
+- 我的：隐藏金额、深色模式、常用备注数量、CSV 导入/导出、清空账本。
+- CSV：表头固定为 `日期,类型,分类,金额,备注`，日期格式为 `yyyy/M/d H:mm`；兼容标准 CSV 和制表符分隔文本。
 
-进入 GitHub Actions 的 **Build Android APK** 工作流即可手动运行；推送到 `main` 也会自动触发。构建产物 Artifact 名称为 `smart-budget-arm64-release`，其中包含 `app-release.apk`。
+当前版本：`2.1.0+3`。
 
-当前构建链：Flutter stable + Java 17 + Android ARM64 Release。
+从 2.1.0 开始建立固定长期 Android 签名。旧的 0.1.0 / 2.0.0 构建使用临时云签名，因此第一次迁移到长期签名版需要：先导出 CSV → 卸载旧版 → 安装 2.1.0 长期签名版 → 导入 CSV。之后只要 versionCode 递增即可直接覆盖升级。
+
+## 源码结构
+```text
+lib/                    Flutter UI 与业务逻辑
+lib/pages/              明细、报表、预算、我的、记一笔
+lib/widgets/            通用卡片与图表组件
+test/                   Flutter 测试
+tool/bootstrap_android.sh  Android host 与原生 CSV/本地存储通道
+.github/workflows/       GitHub Actions 构建与 Release
+```
+
+## 长期签名
+仓库不会保存私钥。GitHub Actions 使用 Repository Secrets 读取长期签名。证书 SHA-256：
+
+`7F:34:3B:B4:19:D2:23:78:ED:5B:DE:6E:75:4F:51:24:3A:D9:84:C1:E8:80:04:FA:13:3B:8A:FE:9B:E3:CD:95`
+
+详见 `SIGNING.md`。

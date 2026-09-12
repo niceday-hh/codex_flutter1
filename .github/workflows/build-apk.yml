@@ -52,6 +52,33 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         run: bash ./tool/bootstrap_android.sh
 
+      - name: Configure fixed release signing
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/shiguang-release.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=shiguang-release.jks
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text()
+          imports = '''import java.util.Properties\nimport java.io.FileInputStream\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) {\n    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n}\n\n'''
+          if 'val keystoreProperties = Properties()' not in s:
+              s = imports + s
+          marker = '    buildTypes {'
+          signing = '''    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }\n\n'''
+          if 'create("release")' not in s:
+              s = s.replace(marker, signing + marker)
+          s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          p.write_text(s)
+          PY
+
       - name: Resolve dependencies
         if: steps.signing.outputs.ready == 'true'
         run: flutter pub get
@@ -64,30 +91,22 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         run: flutter test
 
-      - name: Build ARM64 APK
+      - name: Build fixed-signed ARM64 APK
         if: steps.signing.outputs.ready == 'true'
         run: flutter build apk --release --target-platform android-arm64
 
-      - name: Apply fixed long-term signature
+      - name: Verify signing certificate and schemes
         if: steps.signing.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          KEYSTORE="$RUNNER_TEMP/shiguang-release.jks"
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KEYSTORE"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           test -n "$APKSIGNER"
           INPUT="build/app/outputs/flutter-apk/app-release.apk"
-          OUTPUT="build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk"
-          "$APKSIGNER" sign \
-            --ks "$KEYSTORE" \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass env:KEYSTORE_PASSWORD \
-            --key-pass env:KEY_PASSWORD \
-            --out "$OUTPUT" \
-            "$INPUT"
-          "$APKSIGNER" verify --verbose --print-certs "$OUTPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
+          "$APKSIGNER" verify --verbose --print-certs "$INPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
+          grep -qi 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/apksigner-verify.txt"
           grep -qi '7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95' "$RUNNER_TEMP/apksigner-verify.txt"
+          cp "$INPUT" build/app/outputs/flutter-apk/shiguang-ledger-v2.1.0-arm64.apk
 
       - name: Upload fixed-signed APK
         if: steps.signing.outputs.ready == 'true'

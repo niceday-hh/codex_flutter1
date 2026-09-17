@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../app_theme.dart';
 import '../models.dart';
@@ -9,7 +8,7 @@ class WarmCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(18),
     this.margin,
-    this.radius = 24,
+    this.radius = 20,
     this.onTap,
     this.gradient,
   });
@@ -30,7 +29,7 @@ class WarmCard extends StatelessWidget {
         padding: padding,
         decoration: BoxDecoration(
           color: gradient == null
-              ? Theme.of(context).colorScheme.surface.withValues(alpha: dark ? 0.95 : 0.97)
+              ? Theme.of(context).colorScheme.surface
               : null,
           gradient: gradient,
           borderRadius: BorderRadius.circular(radius),
@@ -44,8 +43,8 @@ class WarmCard extends StatelessWidget {
               color: dark
                   ? Colors.black.withValues(alpha: 0.16)
                   : const Color(0xFF8A6B38).withValues(alpha: 0.065),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -71,12 +70,11 @@ class FrostedBar extends StatelessWidget {
     return RepaintBoundary(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(),
           child: Container(
             decoration: BoxDecoration(
-              color: (dark ? const Color(0xFF181B1E) : Colors.white)
-                  .withValues(alpha: 0.90),
+              color: dark ? const Color(0xFF181B1E) : Colors.white,
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
                 color: Colors.white.withValues(alpha: dark ? 0.08 : 0.88),
@@ -417,3 +415,4 @@ class EntryRow extends StatelessWidget {
     );
   }
 }
+

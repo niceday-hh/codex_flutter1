@@ -29,15 +29,24 @@ class AppStore extends ChangeNotifier {
     '日用': 200,
   };
 
-  List<LedgerEntry> get entries {
-    final list = List<LedgerEntry>.from(_entries);
-    list.sort((a, b) => b.date.compareTo(a.date));
-    return list;
-  }
+  List<LedgerEntry>? _sortedEntries;
+  final Map<(int, int), List<LedgerEntry>> _monthEntries = {};
 
-  List<LedgerEntry> entriesForMonth(DateTime month) => entries
-      .where((e) => e.date.year == month.year && e.date.month == month.month)
-      .toList();
+  // Immutable snapshots are reused until the store changes.
+  List<LedgerEntry> get entries => _sortedEntries ??= List.unmodifiable(
+        List<LedgerEntry>.from(_entries)
+          ..sort((a, b) => b.date.compareTo(a.date)),
+      );
+
+  List<LedgerEntry> entriesForMonth(DateTime month) =>
+      _monthEntries.putIfAbsent((month.year, month.month), () =>
+          List.unmodifiable(entries.where((e) =>
+              e.date.year == month.year && e.date.month == month.month)));
+
+  void _invalidateEntries() {
+    _sortedEntries = null;
+    _monthEntries.clear();
+  }
 
   double incomeForMonth(DateTime month) => entriesForMonth(month)
       .where((e) => e.isIncome)
@@ -274,6 +283,7 @@ class AppStore extends ChangeNotifier {
   }
 
   void _changed() {
+    _invalidateEntries();
     notifyListeners();
     _persist();
   }
@@ -304,6 +314,7 @@ class AppStore extends ChangeNotifier {
           ..clear()
           ..addAll(savedBudgets.map((key, value) => MapEntry(key, (value as num).toDouble())));
       }
+      _invalidateEntries();
       notifyListeners();
     } catch (_) {
       // A preview host may not expose the Android persistence channel.
@@ -421,3 +432,4 @@ class AppStoreScope extends InheritedNotifier<AppStore> {
     return scope!.notifier!;
   }
 }
+

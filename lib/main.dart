@@ -20,30 +20,49 @@ class SmartBudgetApp extends StatefulWidget {
 class _SmartBudgetAppState extends State<SmartBudgetApp> {
   final AppStore store = AppStore();
 
+  late bool _dark = store.darkMode;
+  late final ThemeData _lightTheme = buildTheme();
+  late final ThemeData _darkTheme = buildTheme(dark: true);
+
+  @override
+  void initState() {
+    super.initState();
+    store.addListener(_updateTheme);
+  }
+
+  void _updateTheme() {
+    if (_dark != store.darkMode) setState(() => _dark = store.darkMode);
+  }
+
+  @override
+  void dispose() {
+    store.removeListener(_updateTheme);
+    store.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: store,
-      builder: (context, _) {
-        final dark = store.darkMode;
-        SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-          statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-          systemNavigationBarContrastEnforced: false,
-        ));
-        return AppStoreScope(
-          store: store,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: '拾光账本',
-            theme: buildTheme(dark: dark),
-            home: const AppShell(),
-          ),
-        );
-      },
+    final dark = _dark;
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+    ));
+    return AppStoreScope(
+      store: store,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: '拾光账本',
+        theme: _lightTheme,
+        darkTheme: _darkTheme,
+        themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+        home: const AppShell(),
+      ),
     );
   }
 }
+

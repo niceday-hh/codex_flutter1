@@ -51,11 +51,20 @@ class _HomePageState extends State<HomePage> {
         expense += item.amount;
       }
     }
-    final groups = _groupByDay(items).entries.toList();
+    final rows = <({LedgerEntry? entry, DateTime date, double expense, bool first, bool last})>[];
+    for (final group in _groupByDay(items).values) {
+      final total = group.where((e) => !e.isIncome)
+          .fold<double>(0, (sum, e) => sum + e.amount);
+      rows.add((entry: null, date: group.first.date, expense: total, first: false, last: false));
+      for (var i = 0; i < group.length; i++) {
+        rows.add((entry: group[i], date: group[i].date, expense: 0,
+          first: i == 0, last: i == group.length - 1));
+      }
+    }
 
     return CustomScrollView(
       key: const PageStorageKey<String>('home-scroll'),
-      cacheExtent: 720,
+      cacheExtent: 300,
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
@@ -190,95 +199,56 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, groupIndex) {
-                  final group = groups[groupIndex];
-                  final dayItems = group.value;
-                  final date = dayItems.first.date;
-                  final dayExpense = dayItems
-                      .where((entry) => !entry.isIncome)
-                      .fold<double>(0, (sum, entry) => sum + entry.amount);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 5,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${date.month.toString().padLeft(2, '0')}月${date.day.toString().padLeft(2, '0')}日  ${_weekday(date.weekday)}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                              if (dayExpense > 0)
-                                Text(
-                                  '支出 ${store.displayMoney(dayExpense)}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(fontSize: 12),
-                                ),
-                            ],
-                          ),
+                (context, index) {
+                  final row = rows[index];
+                  final entry = row.entry;
+                  if (entry == null) {
+                    final date = row.date;
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 16, 4, 10),
+                      child: Row(children: [
+                        Expanded(child: Text(
+                          '${date.month.toString().padLeft(2, '0')}月${date.day.toString().padLeft(2, '0')}日  ${_weekday(date.weekday)}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        )),
+                        if (row.expense > 0) Text(
+                          '支出 ${store.displayMoney(row.expense)}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        RepaintBoundary(
-                          child: WarmCard(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 4,
-                            ),
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < dayItems.length; i++) ...[
-                                  EntryRow(
-                                    key: ValueKey(dayItems[i].id),
-                                    entry: dayItems[i],
-                                    amountText: _amountText(store, dayItems[i]),
-                                    onCategoryTap: () => _editCategory(
-                                      context,
-                                      store,
-                                      dayItems[i],
-                                    ),
-                                    onContentTap: () => _editNote(
-                                      context,
-                                      store,
-                                      dayItems[i],
-                                    ),
-                                    onAmountTapAt: (position) => _editAmountPopover(
-                                      context,
-                                      store,
-                                      dayItems[i],
-                                      position,
-                                    ),
-                                    onLongPress: () => _showEntryActions(
-                                      context,
-                                      store,
-                                      dayItems[i],
-                                    ),
-                                  ),
-                                  if (i != dayItems.length - 1)
-                                    Divider(
-                                      height: 1,
-                                      indent: 60,
-                                      color: Theme.of(context).dividerColor,
-                                    ),
-                                ],
-                              ],
-                            ),
-                          ),
+                      ]),
+                    );
+                  }
+                  return DecoratedBox(
+                    key: ValueKey(entry.id),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.vertical(
+                        top: row.first ? const Radius.circular(20) : Radius.zero,
+                        bottom: row.last ? const Radius.circular(20) : Radius.zero,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Column(children: [
+                        EntryRow(
+                          entry: entry,
+                          amountText: _amountText(store, entry),
+                          onCategoryTap: () => _editCategory(context, store, entry),
+                          onContentTap: () => _editNote(context, store, entry),
+                          onAmountTapAt: (position) =>
+                              _editAmountPopover(context, store, entry, position),
+                          onLongPress: () => _showEntryActions(context, store, entry),
                         ),
-                      ],
+                        if (!row.last) Divider(
+                          height: 1, indent: 60,
+                          color: Theme.of(context).dividerColor.withValues(alpha: 0.6),
+                        ),
+                      ]),
                     ),
                   );
                 },
-                childCount: groups.length,
+                childCount: rows.length,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: true,
               ),
@@ -1437,3 +1407,4 @@ String _weekday(int weekday) {
   ];
   return names[weekday - 1];
 }
+

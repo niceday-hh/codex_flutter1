@@ -1,0 +1,144 @@
+name: Build & Release v2.4.0 Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ release/v2.4.0 ]
+    paths-ignore:
+      - '**/*.md'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/v2.4.0
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Check release secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          test -n "$RELEASE_TOKEN"
+
+      - name: Read app version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml)"
+          VERSION_NAME="${APP_VERSION%%+*}"
+          VERSION_CODE="${APP_VERSION##*+}"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "apk_name=shiguang-ledger-v${VERSION_NAME}-arm64.apk" >> "$GITHUB_OUTPUT"
+          echo "Building v${VERSION_NAME} (versionCode ${VERSION_CODE})"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android host
+        run: bash ./tool/bootstrap_android.sh
+
+      - name: Configure fixed release signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/shiguang-release.jks
+          cat > android/key.properties <<EOF2
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=shiguang-release.jks
+          EOF2
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text()
+          imports = '''import java.util.Properties\nimport java.io.FileInputStream\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) {\n    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n}\n\n'''
+          if 'val keystoreProperties = Properties()' not in s:
+              s = imports + s
+          marker = '    buildTypes {'
+          signing = '''    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }\n\n'''
+          if 'create("release")' not in s:
+              s = s.replace(marker, signing + marker)
+          s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          p.write_text(s)
+          PY
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build fixed-signed ARM64 APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Verify fixed signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          INPUT="build/app/outputs/flutter-apk/app-release.apk"
+          "$APKSIGNER" verify --verbose --print-certs "$INPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
+          grep -qi 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/apksigner-verify.txt"
+          grep -qi '7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95' "$RUNNER_TEMP/apksigner-verify.txt"
+          cp "$INPUT" "build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}"
+          sha256sum "build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shiguang-ledger-v${{ steps.meta.outputs.version_name }}-fixed-signing-arm64
+          path: build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version_name }}"
+          TAG="v${VERSION}"
+          APK="build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}"
+          NOTES="release_notes/v${VERSION}.md"
+          FINAL_SHA="$(git rev-parse HEAD)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "拾光账本 v${VERSION}" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --target "$FINAL_SHA" --title "拾光账本 v${VERSION}" --notes-file "$NOTES"
+          fi
+          gh release upload "$TAG" "$APK" --clobber
+

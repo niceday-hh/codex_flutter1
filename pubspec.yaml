@@ -1,7 +1,7 @@
 name: smart_budget
 description: 拾光账本 - warm, fast and private bookkeeping for Android.
 publish_to: 'none'
-version: 2.3.1+6
+version: 2.4.0+7
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
@@ -16,3 +16,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+

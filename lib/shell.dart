@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_theme.dart';
@@ -17,6 +17,8 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+  final Set<int> _visited = {0};
+  bool _adding = false;
 
   static const _pages = <Widget>[
     RepaintBoundary(child: HomePage()),
@@ -28,29 +30,28 @@ class _AppShellState extends State<AppShell> {
   void _goTo(int value) {
     if (value == _index) return;
     HapticFeedback.selectionClick();
-    setState(() => _index = value);
+    setState(() {
+      _visited.add(value);
+      _index = value;
+    });
   }
 
   Future<void> _openAdd() async {
-    HapticFeedback.mediumImpact();
-    await Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 280),
-        reverseTransitionDuration: const Duration(milliseconds: 220),
-        pageBuilder: (_, animation, __) => AddPage(
-          onSaved: () => Navigator.of(context).pop(),
+    if (_adding) return;
+    _adding = true;
+    HapticFeedback.lightImpact();
+    try {
+      await Navigator.of(context).push(
+        CupertinoPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (routeContext) => AddPage(
+            onSaved: () => Navigator.of(routeContext).pop(),
+          ),
         ),
-        transitionsBuilder: (_, animation, secondaryAnimation, child) {
-          final slide = Tween(begin: const Offset(0, 0.035), end: Offset.zero)
-              .chain(CurveTween(curve: Curves.easeOutCubic))
-              .animate(animation);
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: slide, child: child),
-          );
-        },
-      ),
-    );
+      );
+    } finally {
+      _adding = false;
+    }
   }
 
   @override
@@ -67,13 +68,13 @@ class _AppShellState extends State<AppShell> {
             child: IndexedStack(
               index: _index,
               sizing: StackFit.expand,
-              children: List.generate(
-                _pages.length,
-                (pageIndex) => TickerMode(
-                  enabled: pageIndex == _index,
-                  child: _pages[pageIndex],
-                ),
-              ),
+              children: [
+                for (var i = 0; i < _pages.length; i++)
+                  TickerMode(
+                    enabled: i == _index,
+                    child: _visited.contains(i) ? _pages[i] : const SizedBox.shrink(),
+                  ),
+              ],
             ),
           ),
         ],
@@ -83,14 +84,14 @@ class _AppShellState extends State<AppShell> {
         child: RepaintBoundary(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(30),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(),
               child: Container(
                 height: 78,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
+                  border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.6)),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.07),
@@ -102,13 +103,13 @@ class _AppShellState extends State<AppShell> {
                 child: Row(
                   children: [
                     _NavItem(
-                      icon: Icons.receipt_long_rounded,
+                      icon: Icons.receipt_long_outlined,
                       label: '明细',
                       selected: _index == 0,
                       onTap: () => _goTo(0),
                     ),
                     _NavItem(
-                      icon: Icons.insights_rounded,
+                      icon: Icons.bar_chart_rounded,
                       label: '报表',
                       selected: _index == 1,
                       onTap: () => _goTo(1),
@@ -116,7 +117,7 @@ class _AppShellState extends State<AppShell> {
                     Expanded(
                       child: Center(
                         child: Transform.translate(
-                          offset: const Offset(0, -14),
+                          offset: const Offset(0, 0),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: _openAdd,
@@ -125,8 +126,8 @@ class _AppShellState extends State<AppShell> {
                               height: 70,
                               child: Center(
                                 child: Container(
-                                  width: 62,
-                                  height: 62,
+                                  width: 54,
+                                  height: 54,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     gradient: const LinearGradient(
@@ -159,7 +160,7 @@ class _AppShellState extends State<AppShell> {
                       ),
                     ),
                     _NavItem(
-                      icon: Icons.savings_rounded,
+                      icon: Icons.account_balance_wallet_outlined,
                       label: '预算',
                       selected: _index == 2,
                       onTap: () => _goTo(2),
@@ -271,3 +272,4 @@ class _WarmBackground extends StatelessWidget {
     );
   }
 }
+

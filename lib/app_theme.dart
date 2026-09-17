@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppPalette {
-  static const background = Color(0xFFF8F5EF);
+  static const background = Color(0xFFF5F4F0);
   static const backgroundDark = Color(0xFF111315);
-  static const surface = Color(0xFFFFFEFB);
+  static const surface = Color(0xFFFFFFFF);
   static const surfaceDark = Color(0xFF1B1E20);
   static const primary = Color(0xFFF2A722);
   static const primaryDeep = Color(0xFFB66A00);
@@ -57,16 +57,16 @@ ThemeData buildTheme({bool dark = false}) {
     textTheme: TextTheme(
       displaySmall: TextStyle(
         color: ink,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w700,
         letterSpacing: -1.6,
       ),
       headlineSmall: TextStyle(
         color: ink,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w700,
         letterSpacing: -0.8,
       ),
-      titleLarge: TextStyle(color: ink, fontWeight: FontWeight.w800),
-      titleMedium: TextStyle(color: ink, fontWeight: FontWeight.w800),
+      titleLarge: TextStyle(color: ink, fontWeight: FontWeight.w600),
+      titleMedium: TextStyle(color: ink, fontWeight: FontWeight.w600),
       bodyLarge: TextStyle(color: ink),
       bodyMedium: TextStyle(color: ink),
       bodySmall: TextStyle(color: secondary),
@@ -155,3 +155,4 @@ Color colorForCategory(String category) {
     default: return const Color(0xFF9AA59F);
   }
 }
+

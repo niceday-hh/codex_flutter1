@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
+import '../insights/insight_panel.dart';
 import '../app_theme.dart';
 import '../models.dart';
 import '../widgets/charts.dart';
@@ -50,7 +51,6 @@ class _StatsPageState extends State<StatsPage> {
         : points[safeIndex];
     final current = _periodRange(DateTime.now(), _periodIndex);
     final isCurrent = _sameRange(range, current);
-    final insights = _buildInsights(modeEntries, summaries, total);
 
     return CustomScrollView(
       key: const PageStorageKey<String>('stats-v23-scroll'),
@@ -242,10 +242,8 @@ class _StatsPageState extends State<StatsPage> {
                     ),
                     compact: twoColumns,
                   );
-                  final insight = _InsightCard(
-                    items: insights,
-                    incomeMode: _incomeMode,
-                    compact: twoColumns,
+                  final insight = InsightPanel(
+                    start: range.start, end: range.end, income: _incomeMode,
                   );
                   if (!twoColumns) {
                     return Column(
@@ -455,46 +453,6 @@ class _StatsPageState extends State<StatsPage> {
         .toList()
       ..sort((a, b) => b.amount.compareTo(a.amount));
     return summaries;
-  }
-
-  List<_InsightItem> _buildInsights(
-    List<LedgerEntry> entries,
-    List<CategorySummary> summaries,
-    double total,
-  ) {
-    if (entries.isEmpty || total <= 0 || summaries.isEmpty) {
-      return const [
-        _InsightItem(title: '等待更多记录', subtitle: '记账后自动生成消费洞察', value: '--'),
-        _InsightItem(title: '周末节奏', subtitle: '暂无可分析数据', value: '--'),
-        _InsightItem(title: '最大单笔', subtitle: '暂无可分析数据', value: '--'),
-      ];
-    }
-    final top = summaries.first;
-    final topRatio = (top.amount / total * 100).round();
-    final weekend = entries
-        .where((entry) =>
-            entry.date.weekday == DateTime.saturday ||
-            entry.date.weekday == DateTime.sunday)
-        .fold<double>(0, (sum, entry) => sum + entry.amount);
-    final weekendRatio = (weekend / total * 100).round();
-    final maxEntry = entries.reduce((a, b) => a.amount >= b.amount ? a : b);
-    return [
-      _InsightItem(
-        title: '本期${top.name}${_incomeMode ? '收入' : '支出'}占比',
-        subtitle: '${top.count} 笔 · ${top.name}',
-        value: '$topRatio%',
-      ),
-      _InsightItem(
-        title: '周末${_incomeMode ? '入账' : '消费'}占比',
-        subtitle: weekendRatio >= 30 ? '周末活动更集中' : '工作日更活跃',
-        value: '$weekendRatio%',
-      ),
-      _InsightItem(
-        title: '最大单笔${_incomeMode ? '收入' : '支出'}',
-        subtitle: '${maxEntry.date.month}月${maxEntry.date.day}日 · ${maxEntry.category}',
-        value: '¥${_trim(maxEntry.amount)}',
-      ),
-    ];
   }
 
   List<LedgerEntry> _heatMapEntries(AppStore store) {
@@ -1012,96 +970,6 @@ class _CompositionCard extends StatelessWidget {
   }
 }
 
-class _InsightItem {
-  const _InsightItem({required this.title, required this.subtitle, required this.value});
-  final String title;
-  final String subtitle;
-  final String value;
-}
-
-class _InsightCard extends StatelessWidget {
-  const _InsightCard({required this.items, required this.incomeMode, required this.compact});
-  final List<_InsightItem> items;
-  final bool incomeMode;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return WarmCard(
-      padding: EdgeInsets.all(compact ? 14 : 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '消费洞察',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: compact ? 17 : 20),
-          ),
-          const SizedBox(height: 12),
-          for (var index = 0; index < items.length; index++) ...[
-            Container(
-              padding: EdgeInsets.all(compact ? 10 : 13),
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.78),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.72)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: compact ? 32 : 38,
-                    height: compact ? 32 : 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: reportPaletteColor(index).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(
-                      [Icons.auto_awesome_rounded, Icons.equalizer_rounded, Icons.emoji_events_rounded][index % 3],
-                      size: compact ? 18 : 21,
-                      color: reportPaletteColor(index),
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          items[index].title,
-                          maxLines: compact ? 2 : 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: compact ? 11.2 : 13),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          items[index].subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: compact ? 9.5 : 11.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    items[index].value,
-                    style: TextStyle(
-                      fontSize: compact ? 11.5 : 13,
-                      fontWeight: FontWeight.w900,
-                      color: incomeMode ? AppPalette.mint : reportPaletteColor(index),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (index != items.length - 1) const SizedBox(height: 9),
-          ],
-          if (compact) const SizedBox(height: 7),
-        ],
-      ),
-    );
-  }
-}
 
 class _RankingCard extends StatelessWidget {
   const _RankingCard({
@@ -1348,3 +1216,4 @@ class _HeatMapCard extends StatelessWidget {
     );
   }
 }
+

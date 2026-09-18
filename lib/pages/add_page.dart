@@ -154,7 +154,7 @@ class _AddPageState extends State<AddPage> {
                   ),
                   Divider(height: 20, color: Theme.of(context).dividerColor),
                   GestureDetector(
-                    onTap: () => _editNote(context, quickNotes),
+                    onTap: () => _editNote(context),
                     child: Row(
                       children: [
                         Expanded(
@@ -229,7 +229,7 @@ class _AddPageState extends State<AddPage> {
     }
   }
 
-  Future<void> _editNote(BuildContext context, List<String> quickNotes) async {
+  Future<void> _editNote(BuildContext context) async {
     final store = AppStoreScope.of(context);
     final value = await showNotePicker(context, entries: store.entries,
       income: _income, category: _selectedCategory, initial: _note);

@@ -72,13 +72,14 @@ class _NotePickerState extends State<NotePicker> {
               final n = notes[i];
               return ListTile(contentPadding: EdgeInsets.zero, title: Text(n.text), subtitle: Text(n.categories.join(' · ')), trailing: _draft.text == n.text ? const Icon(Icons.check_circle) : Text('${n.count} 次'), onTap: () => _select(n.text));
             })
-            : SingleChildScrollView(child: Wrap(spacing: 8, runSpacing: 8, children: [for (final n in notes) ChoiceChip(
+            : SingleChildScrollView(child: Wrap(spacing: 8, runSpacing: 8, children: [for (final n in notes.take(40)) ChoiceChip(
               selected: _draft.text == n.text, showCheckmark: true,
               label: Text(n.text, style: TextStyle(fontSize: _tab == 0 ? 13 + (n.count.clamp(1, 6) - 1).toDouble() : 14)),
               onSelected: (_) => _select(n.text),
               selectedColor: theme.colorScheme.primaryContainer,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
             )]))),
+          if (_tab != 2 && notes.length > 40) TextButton(onPressed: () => setState(() { _tab = 2; }), child: Text('查看全部 ${notes.length} 个匹配备注')),
           const SizedBox(height: 8),
           TextField(controller: _draft, maxLength: 80, onChanged: (_) => setState(() {}), decoration: InputDecoration(labelText: '已选备注 / 自己填写', suffixIcon: IconButton(tooltip: '清空备注', icon: const Icon(Icons.close), onPressed: () => _select('')))),
           SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context, _draft.text.trim()), child: Text(_draft.text.trim().isEmpty ? '保存空备注' : '使用此备注'))),

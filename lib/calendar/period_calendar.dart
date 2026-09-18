@@ -85,8 +85,8 @@ class PeriodCalendar extends StatelessWidget {
       const SizedBox(height: 12),
       if (periodIndex == 0) WarmCard(child: Column(children: [for(var i=0;i<7;i++) Builder(builder: (_) {
         final date = DateTime(start.year,start.month,start.day+i);
-        return ListTile(contentPadding: EdgeInsets.zero, leading: SizedBox(width: 42,height: 42,child: dayTile(date)), title: Text('${date.month}月${date.day}日 · ${const ['一','二','三','四','五','六','日'][date.weekday-1]}'),
-          subtitle: Text(dateContext(date).labels.join(' · ')), trailing: Text(totals.containsKey(date) ? store.displayMoney(totals[date]!) : '暂无记录'), onTap: () => open(date));
+        return Material(color: Colors.transparent, child: ListTile(contentPadding: EdgeInsets.zero, leading: SizedBox(width: 42,height: 42,child: dayTile(date)), title: Text('${date.month}月${date.day}日 · ${const ['一','二','三','四','五','六','日'][date.weekday-1]}'),
+          subtitle: Text(dateContext(date).labels.join(' · ')), trailing: Text(totals.containsKey(date) ? store.displayMoney(totals[date]!) : '暂无记录'), onTap: () => open(date)));
       })])),
       if (periodIndex == 2) for(final m in months) Padding(padding: const EdgeInsets.only(bottom: 12), child: month(m,false)),
       if (periodIndex == 3) LayoutBuilder(builder: (_, c) {

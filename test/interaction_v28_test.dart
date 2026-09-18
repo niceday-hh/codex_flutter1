@@ -37,8 +37,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:Builder(builder:(context)=>TextButton(onPressed:() async { result=await showNotePicker(context,entries:[for(var i=0;i<80;i++) entry('$i',1,DateTime(2026),note:'备注$i',category:'购物')],income:false,category:'餐饮',initial:'原备注'); },child:const Text('打开'))))));
     await tester.tap(find.text('打开'));await tester.pumpAndSettle();
     await tester.tap(find.text('全部'));await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
     await tester.enterText(find.byType(TextField).first,'备注79');await tester.pumpAndSettle();
-    await tester.tap(find.text('备注79'));await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile,'备注79'));await tester.pumpAndSettle();
     await tester.tap(find.text('使用此备注'));await tester.pumpAndSettle();
     expect(result,'备注79');expect(tester.takeException(),isNull);
   });

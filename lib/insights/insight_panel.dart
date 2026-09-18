@@ -5,6 +5,7 @@ import '../app_store.dart';
 import '../app_theme.dart';
 import '../widgets/common.dart';
 import 'insight_engine.dart';
+import 'insight_guide.dart';
 
 class InsightPanel extends StatefulWidget {
   const InsightPanel({super.key, required this.start, required this.end, required this.income});
@@ -37,6 +38,8 @@ class _InsightPanelState extends State<InsightPanel> {
       const SizedBox(height: 8),
       Text('${_report.days} 天观察窗 · ${_report.count} 笔记录', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 12),
+      if (!hidden) Padding(padding: const EdgeInsets.only(bottom: 12),
+        child: Text(overviewText(_report, income: widget.income), style: const TextStyle(height: 1.5))),
       for (final item in _report.items.take(3)) Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -81,6 +84,8 @@ class _InsightExplorerState extends State<_InsightExplorer> {
         Text('${report.days} 个观察日 · ${report.recordDays} 天有记录 · ${report.count} 笔\n无记录日不一定是零消费；缺失记录会影响所有结论。分析仅在本地完成。',
           style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 16),
+        InsightOverview(report: report, hidden: hidden, income: widget.income),
+        const SizedBox(height: 16),
         Wrap(spacing: 8, children: [for (final group in ['全部','变化','结构','线索', if (!widget.income) '预算'])
           ChoiceChip(label: Text(group), selected: _filter == group,
             onSelected: (_) => setState(() => _filter = group))]),
@@ -96,6 +101,8 @@ class _InsightExplorerState extends State<_InsightExplorer> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700,
                   color: item.ready ? AppPalette.primaryDeep : Theme.of(context).textTheme.bodySmall?.color)),
               const SizedBox(height: 8),
+              Text(insightGuides[item.id]?.$1 ?? '先留下一些记录', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
               Text(hidden ? '金额已隐藏；关闭“隐藏金额”后查看分析。' : item.summary),
               const SizedBox(height: 10),
               Text('查看依据、限制与账单', style: Theme.of(context).textTheme.bodySmall),
@@ -134,6 +141,7 @@ class _InsightExplorerState extends State<_InsightExplorer> {
             Text(hidden ? '金额已隐藏' : item.value, style: Theme.of(context).textTheme.headlineSmall),
             if (!hidden) ...[
               const SizedBox(height: 16), Text(item.summary),
+              InsightGuide(item: item, report: widget.report),
               const SizedBox(height: 20), const Text('如何计算', style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8), Text(item.method),
               const SizedBox(height: 20), const Text('下一步', style: TextStyle(fontWeight: FontWeight.w700)),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
+import '../calendar/spending_calendar.dart';
 import '../insights/insight_panel.dart';
 import '../app_theme.dart';
 import '../models.dart';
@@ -280,28 +281,12 @@ class _StatsPageState extends State<StatsPage> {
                       store,
                     ),
                   );
-                  final heatmap = _HeatMapCard(
-                    anchor: _anchor,
-                    entries: _heatMapEntries(store),
-                    compact: twoColumns,
-                  );
-                  if (!twoColumns) {
-                    return Column(
-                      children: [
-                        ranking,
-                        const SizedBox(height: 14),
-                        heatmap,
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: ranking),
-                      const SizedBox(width: 12),
-                      Expanded(child: heatmap),
-                    ],
-                  );
+                  return Column(children: [
+                    ranking,
+                    const SizedBox(height: 16),
+                    SpendingCalendar(anchor: _anchor,
+                      entries: store.entries, income: _incomeMode),
+                  ]);
                 },
               ),
             ]),
@@ -455,17 +440,6 @@ class _StatsPageState extends State<StatsPage> {
     return summaries;
   }
 
-  List<LedgerEntry> _heatMapEntries(AppStore store) {
-    final monthStart = DateTime(_anchor.year, _anchor.month, 1);
-    final monthEnd = DateTime(_anchor.year, _anchor.month + 1, 1);
-    return store.entries
-        .where((entry) =>
-            !entry.isIncome &&
-            !entry.date.isBefore(monthStart) &&
-            entry.date.isBefore(monthEnd))
-        .toList();
-  }
-
   Future<void> _openCategory(
     BuildContext context,
     String category,
@@ -478,6 +452,7 @@ class _StatsPageState extends State<StatsPage> {
       matching,
       store,
       '$category · ${_incomeMode ? '收入' : '支出'}明细',
+      categoryTotal: _sum(matching),
     );
   }
 
@@ -485,8 +460,9 @@ class _StatsPageState extends State<StatsPage> {
     BuildContext context,
     List<LedgerEntry> entries,
     AppStore store,
-    String title,
-  ) async {
+    String title, {
+    double? categoryTotal,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -523,6 +499,8 @@ class _StatsPageState extends State<StatsPage> {
                           final entry = entries[index];
                           return EntryRow(
                             entry: entry,
+                            noteSuffix: categoryTotal == null || store.hideAmounts ? null
+                                : categoryShare(entry.amount, categoryTotal),
                             amountText: entry.isIncome
                                 ? store.displayMoney(entry.amount, signed: true)
                                 : store.hideAmounts
@@ -1112,106 +1090,6 @@ class _RankingRow extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HeatMapCard extends StatelessWidget {
-  const _HeatMapCard({required this.anchor, required this.entries, required this.compact});
-  final DateTime anchor;
-  final List<LedgerEntry> entries;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final monthDays = DateTime(anchor.year, anchor.month + 1, 0).day;
-    final startWeekday = DateTime(anchor.year, anchor.month, 1).weekday;
-    final amounts = <int, double>{};
-    for (final entry in entries) {
-      amounts[entry.date.day] = (amounts[entry.date.day] ?? 0) + entry.amount;
-    }
-    final maxAmount = amounts.values.fold<double>(0, (maxValue, value) => value > maxValue ? value : maxValue);
-
-    return WarmCard(
-      padding: EdgeInsets.all(compact ? 14 : 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '收支日历热力',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: compact ? 17 : 20),
-          ),
-          const SizedBox(height: 11),
-          Row(
-            children: const ['一', '二', '三', '四', '五', '六', '日']
-                .map((label) => Expanded(
-                      child: Center(
-                        child: Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
-                      ),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: 42,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisExtent: compact ? 26 : 34,
-              crossAxisSpacing: compact ? 3 : 5,
-              mainAxisSpacing: compact ? 3 : 5,
-            ),
-            itemBuilder: (context, index) {
-              final day = index - startWeekday + 2;
-              if (day <= 0 || day > monthDays) return const SizedBox.shrink();
-              final amount = amounts[day] ?? 0;
-              final intensity = maxAmount <= 0 ? 0.0 : (amount / maxAmount).clamp(0.0, 1.0).toDouble();
-              final background = amount <= 0
-                  ? Theme.of(context).scaffoldBackgroundColor
-                  : Color.lerp(const Color(0xFFFFF0D8), AppPalette.primary, intensity)!;
-              return Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: background,
-                  borderRadius: BorderRadius.circular(compact ? 8 : 10),
-                ),
-                child: Text(
-                  '$day',
-                  style: TextStyle(
-                    fontSize: compact ? 9.5 : 11,
-                    fontWeight: FontWeight.w800,
-                    color: intensity > 0.58 ? Colors.white : Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text('支出较少', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9.5)),
-              const Spacer(),
-              ...List.generate(5, (index) {
-                final intensity = index / 4;
-                return Container(
-                  width: compact ? 8 : 11,
-                  height: compact ? 8 : 11,
-                  margin: const EdgeInsets.only(left: 4),
-                  decoration: BoxDecoration(
-                    color: Color.lerp(const Color(0xFFFFF0D8), AppPalette.primary, intensity),
-                    shape: BoxShape.circle,
-                  ),
-                );
-              }),
-              if (!compact) ...[
-                const SizedBox(width: 6),
-                Text('支出较多', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9.5)),
-              ],
-            ],
-          ),
-        ],
       ),
     );
   }

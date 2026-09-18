@@ -305,6 +305,9 @@ class PillTabs extends StatelessWidget {
   }
 }
 
+String categoryShare(double amount, double total) => total > 0 && total.isFinite && amount.isFinite
+    ? '（${(amount / total * 100).toStringAsFixed(1)}%）' : '（—）';
+
 class EntryRow extends StatelessWidget {
   const EntryRow({
     super.key,
@@ -316,10 +319,12 @@ class EntryRow extends StatelessWidget {
     this.onAmountTap,
     this.onAmountTapAt,
     this.onLongPress,
+    this.noteSuffix,
   });
 
   final LedgerEntry entry;
   final String amountText;
+  final String? noteSuffix;
   final VoidCallback? onTap;
   final VoidCallback? onCategoryTap;
   final VoidCallback? onContentTap;
@@ -360,15 +365,15 @@ class EntryRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        entry.note.isEmpty ? entry.title : entry.note,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                      Row(children: [
+                        Flexible(child: Text(
+                          entry.note.isEmpty ? entry.title : entry.note,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        )),
+                        if (noteSuffix != null) Text(noteSuffix!,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11)),
+                      ]),
                       const SizedBox(height: 3),
                       Text(
                         '${entry.category} · ${entry.date.hour.toString().padLeft(2, '0')}:${entry.date.minute.toString().padLeft(2, '0')}',

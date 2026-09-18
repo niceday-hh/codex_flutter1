@@ -19,8 +19,10 @@ void main() {
     await tester.tap(find.text('深入分析与方法'));
     await tester.pumpAndSettle();
     expect(find.text('消费洞察实验室'),findsOneWidget);
+    await tester.ensureVisible(find.text('结构'));
     await tester.tap(find.text('结构'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('消费集中度'));
     await tester.tap(find.text('消费集中度'));
     await tester.pumpAndSettle();
     expect(find.text('如何计算'),findsOneWidget);

@@ -55,6 +55,17 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             val prefs = getSharedPreferences("smart_budget", MODE_PRIVATE)
             when (call.method) {
+                "loadCalendar" -> result.success(prefs.getString("calendar_state", null))
+                "saveCalendar" -> {
+                    val payload = call.arguments as? String
+                    if (payload == null) {
+                        result.error("INVALID_DATA", "Expected calendar JSON", null)
+                    } else if (prefs.edit().putString("calendar_state", payload).commit()) {
+                        result.success(null)
+                    } else {
+                        result.error("SAVE_FAILED", "Calendar cache was not saved", null)
+                    }
+                }
                 "load" -> result.success(prefs.getString("app_state", null))
                 "save" -> {
                     val payload = call.arguments as? String
@@ -191,6 +202,8 @@ from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 s = p.read_text()
+if 'android.permission.INTERNET' not in s:
+    s = s.replace('<application', '<uses-permission android:name="android.permission.INTERNET" />\n    <application', 1)
 s = s.replace('android:label="smart_budget"', 'android:label="拾光账本"')
 if 'android:hardwareAccelerated=' not in s:
     s = s.replace('<application\n', '<application\n        android:hardwareAccelerated="true"\n')
@@ -198,3 +211,4 @@ p.write_text(s)
 PY
 
 echo "Android host prepared."
+

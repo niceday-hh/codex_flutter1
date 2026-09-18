@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
+import '../calendar/calendar_settings.dart';
 import '../app_theme.dart';
 import '../widgets/common.dart';
 
@@ -80,6 +81,13 @@ class ProfilePage extends StatelessWidget {
                   title: '深色模式',
                   value: store.darkMode,
                   onChanged: store.setDarkMode,
+                ),
+                _divider(context),
+                _ArrowRow(
+                  icon: Icons.calendar_month_outlined,
+                  title: '日期资料更新',
+                  subtitle: '假期、补班、节气 · 手动或自动检查',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CalendarSettings())),
                 ),
                 _divider(context),
                 _ArrowRow(
@@ -346,3 +354,4 @@ class _ArrowRow extends StatelessWidget {
     );
   }
 }
+

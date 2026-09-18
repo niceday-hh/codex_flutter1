@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'calendar/calendar_updates.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_store.dart';
@@ -28,6 +30,8 @@ class _SmartBudgetAppState extends State<SmartBudgetApp> {
   void initState() {
     super.initState();
     store.addListener(_updateTheme);
+    WidgetsBinding.instance.addObserver(CalendarUpdates.instance);
+    unawaited(CalendarUpdates.instance.autoCheck());
   }
 
   void _updateTheme() {
@@ -36,6 +40,7 @@ class _SmartBudgetAppState extends State<SmartBudgetApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(CalendarUpdates.instance);
     store.removeListener(_updateTheme);
     store.dispose();
     super.dispose();

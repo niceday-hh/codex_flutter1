@@ -4,6 +4,8 @@ import '../app_store.dart';
 import '../models.dart';
 import '../widgets/common.dart';
 import 'date_context.dart';
+import 'calendar_updates.dart';
+import 'calendar_settings.dart';
 
 Color calendarTint(bool dark, double intensity) => Color.lerp(
   dark ? const Color(0xFF25332E) : const Color(0xFFF0F5EF),
@@ -26,7 +28,10 @@ class _SpendingCalendarState extends State<SpendingCalendar> {
     if (oldWidget.anchor.year!=widget.anchor.year || oldWidget.anchor.month!=widget.anchor.month) _selected=null;
   }
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(animation: CalendarUpdates.instance,
+    builder: (context, _) => _calendar(context));
+
+  Widget _calendar(BuildContext context) {
     final store=AppStoreScope.of(context), anchor=widget.anchor;
     final dark=Theme.of(context).brightness==Brightness.dark, hidden=store.hideAmounts;
     final byDay=<int,List<LedgerEntry>>{};
@@ -88,7 +93,9 @@ class _SpendingCalendarState extends State<SpendingCalendar> {
       if(selectedEntries.isNotEmpty) TextButton(onPressed:()=>showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,
         builder:(_)=>SafeArea(child:SizedBox(height:MediaQuery.sizeOf(context).height*.6,child:ListView.builder(padding:const EdgeInsets.all(20),itemCount:selectedEntries.length,itemBuilder:(_,i)=>EntryRow(entry:selectedEntries[i],amountText:hidden?'••••':'¥${selectedEntries[i].amount.toStringAsFixed(2)}'))))),child:Text('查看当天 ${selectedEntries.length} 笔账单')),
       const Divider(),
-      Text(anchor.year==2026?'中国大陆 2026 放假调休安排 · 节气按北京时间\n节气是季节节点，不一定放假；颜色只表示金额，不表示日期导致消费。':'该年仅显示周末；节假日与节气资料尚未收录，不推断调休。',style:Theme.of(context).textTheme.bodySmall?.copyWith(fontSize:11)),
+      Text('中国大陆放假调休 · 节气按北京时间\n${info.known ? '假期资料已收录' : '假期资料未收录'} · ${info.termsKnown ? '节气资料已收录' : '节气资料未收录'}\n节气不一定放假；颜色仅表示金额。',style:Theme.of(context).textTheme.bodySmall?.copyWith(fontSize:11)),
+      TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CalendarSettings())),
+        icon: const Icon(Icons.update), label: const Text('日期资料与更新')),
     ]));
   }
 }

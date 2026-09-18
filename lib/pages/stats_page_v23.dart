@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
-import '../calendar/spending_calendar.dart';
+import '../calendar/period_calendar.dart';
+import '../widgets/sorted_entries.dart';
 import '../insights/insight_panel.dart';
 import '../app_theme.dart';
 import '../models.dart';
@@ -18,6 +19,7 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   int _periodIndex = 1;
+  int _viewIndex = 0;
   bool _incomeMode = false;
   late DateTime _anchor;
   int _selectedPoint = 0;
@@ -105,7 +107,13 @@ class _StatsPageState extends State<StatsPage> {
                   });
                 },
               ),
+              const SizedBox(height: 12),
+              PillTabs(labels: const ['统计', '日历'], index: _viewIndex,
+                onChanged: (i) => setState(() => _viewIndex = i)),
               const SizedBox(height: 16),
+              if (_viewIndex == 1) PeriodCalendar(start: range.start, end: range.end,
+                periodIndex: _periodIndex, entries: store.entries, income: _incomeMode),
+              if (_viewIndex == 0) ...[
               WarmCard(
                 padding: const EdgeInsets.fromLTRB(17, 18, 17, 17),
                 child: Row(
@@ -281,14 +289,10 @@ class _StatsPageState extends State<StatsPage> {
                       store,
                     ),
                   );
-                  return Column(children: [
-                    ranking,
-                    const SizedBox(height: 16),
-                    SpendingCalendar(anchor: _anchor,
-                      entries: store.entries, income: _incomeMode),
-                  ]);
+                  return ranking;
                 },
               ),
+              ],
             ]),
           ),
         ),
@@ -471,48 +475,7 @@ class _StatsPageState extends State<StatsPage> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.74,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                  Text('${entries.length} 笔', style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: entries.isEmpty
-                    ? Center(
-                        child: Text('当前节点暂无明细', style: Theme.of(context).textTheme.bodySmall),
-                      )
-                    : ListView.separated(
-                        cacheExtent: 520,
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: entries.length,
-                        separatorBuilder: (_, __) => Divider(
-                          indent: 60,
-                          color: Theme.of(context).dividerColor,
-                        ),
-                        itemBuilder: (_, index) {
-                          final entry = entries[index];
-                          return EntryRow(
-                            entry: entry,
-                            noteSuffix: categoryTotal == null || store.hideAmounts ? null
-                                : categoryShare(entry.amount, categoryTotal),
-                            amountText: entry.isIncome
-                                ? store.displayMoney(entry.amount, signed: true)
-                                : store.hideAmounts
-                                    ? '••••'
-                                    : '-${store.displayMoney(entry.amount)}',
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
+        child: SortedEntries(entries: entries, store: store, title: title, categoryTotal: categoryTotal),
       ),
     );
   }

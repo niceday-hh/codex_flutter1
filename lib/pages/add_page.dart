@@ -1,3 +1,4 @@
+import '../widgets/note_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
@@ -229,56 +230,9 @@ class _AddPageState extends State<AddPage> {
   }
 
   Future<void> _editNote(BuildContext context, List<String> quickNotes) async {
-    final controller = TextEditingController(text: _note);
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('填写备注', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 60,
-              decoration: InputDecoration(
-                hintText: '例如：小象买菜、月工资、高铁票…',
-                filled: true,
-                fillColor: Theme.of(context).scaffoldBackgroundColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-              ),
-            ),
-            if (quickNotes.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text('常用备注', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: quickNotes.map((note) => ActionChip(label: Text(note), onPressed: () => controller.text = note)).toList(),
-              ),
-            ],
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                style: FilledButton.styleFrom(backgroundColor: AppPalette.primary, foregroundColor: AppPalette.ink),
-                child: const Text('完成', style: TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
+    final store = AppStoreScope.of(context);
+    final value = await showNotePicker(context, entries: store.entries,
+      income: _income, category: _selectedCategory, initial: _note);
     if (value != null && mounted) setState(() => _note = value);
   }
 
@@ -419,3 +373,4 @@ class _Keypad extends StatelessWidget {
     );
   }
 }
+

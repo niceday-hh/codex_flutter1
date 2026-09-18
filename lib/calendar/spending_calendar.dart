@@ -13,10 +13,12 @@ Color calendarTint(bool dark, double intensity) => Color.lerp(
 Color calendarInk(bool dark) => dark ? const Color(0xFFF4F7EF) : const Color(0xFF233D2A);
 
 class SpendingCalendar extends StatefulWidget {
-  const SpendingCalendar({super.key,required this.anchor,required this.entries,required this.income});
+  const SpendingCalendar({super.key,required this.anchor,required this.entries,required this.income, this.initialDay, this.heatMaximum});
   final DateTime anchor;
   final List<LedgerEntry> entries;
   final bool income;
+  final int? initialDay;
+  final double? heatMaximum;
   @override
   State<SpendingCalendar> createState()=>_SpendingCalendarState();
 }
@@ -39,10 +41,10 @@ class _SpendingCalendarState extends State<SpendingCalendar> {
       byDay.putIfAbsent(e.date.day,()=>[]).add(e);
     }
     final totals=byDay.map((day,es)=>MapEntry(day,es.fold<double>(0,(s,e)=>s+e.amount)));
-    final maximum=totals.values.fold<double>(0,math.max), total=totals.values.fold<double>(0,(s,v)=>s+v);
+    final maximum=widget.heatMaximum ?? totals.values.fold<double>(0,math.max), total=totals.values.fold<double>(0,(s,v)=>s+v);
     final days=DateTime(anchor.year,anchor.month+1,0).day;
     final offset=DateTime(anchor.year,anchor.month,1).weekday-1;
-    final selected=(_selected??1).clamp(1,days);
+    final selected=(_selected??widget.initialDay??1).clamp(1,days);
     final selectedDate=DateTime(anchor.year,anchor.month,selected), info=dateContext(DateTime(anchor.year,anchor.month,selected));
     final selectedEntries=byDay[selected]??[];
     final label=widget.income?'收入':'支出';

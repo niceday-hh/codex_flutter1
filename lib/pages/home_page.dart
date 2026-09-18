@@ -1,3 +1,4 @@
+import '../widgets/note_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
@@ -327,20 +328,8 @@ class _HomePageState extends State<HomePage> {
   ) async {
     HapticFeedback.selectionClick();
     final initial = entry.note.isNotEmpty ? entry.note : entry.title;
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (_) => _NoteEditorSheet(
-        initial: initial,
-        category: entry.category,
-        recentNotes: store.notesForCategory(
-          entry.category,
-          income: entry.isIncome,
-        ),
-      ),
-    );
+    final value = await showNotePicker(context, entries: store.entries,
+      income: entry.isIncome, category: entry.category, initial: initial);
     if (value == null) return;
     final clean = value.trim();
     store.updateEntry(
@@ -837,157 +826,6 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   }
 }
 
-class _NoteEditorSheet extends StatefulWidget {
-  const _NoteEditorSheet({
-    required this.initial,
-    required this.category,
-    required this.recentNotes,
-  });
-
-  final String initial;
-  final String category;
-  final List<String> recentNotes;
-
-  @override
-  State<_NoteEditorSheet> createState() => _NoteEditorSheetState();
-}
-
-class _NoteEditorSheetState extends State<_NoteEditorSheet> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initial);
-    _controller.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _controller.text.length,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _useNote(String value) {
-    _controller.text = value;
-    _controller.selection = TextSelection.collapsed(
-      offset: _controller.text.length,
-    );
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    final recent = widget.recentNotes
-        .where((note) => note != widget.initial)
-        .take(10)
-        .toList();
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '修改名称 / 备注',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colorForCategory(widget.category)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    widget.category,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: colorForCategory(widget.category),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(
-              '同分类最近使用的备注可以一键复用',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (recent.isNotEmpty) ...[
-              const SizedBox(height: 13),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: recent
-                    .map(
-                      (note) => ActionChip(
-                        label: Text(
-                          note,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onPressed: () => _useNote(note),
-                        backgroundColor:
-                            Theme.of(context).scaffoldBackgroundColor,
-                        side: BorderSide(color: Theme.of(context).dividerColor),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-            const SizedBox(height: 14),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              maxLength: 80,
-              onSubmitted: (value) => Navigator.of(context).pop(value),
-              decoration: InputDecoration(
-                hintText: '输入名称或备注',
-                filled: true,
-                fillColor: Theme.of(context).scaffoldBackgroundColor,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(_controller.text),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppPalette.primary,
-                  foregroundColor: AppPalette.ink,
-                ),
-                child: const Text(
-                  '保存修改',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _AmountQuickEditor extends StatefulWidget {
   const _AmountQuickEditor({

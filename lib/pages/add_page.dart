@@ -19,6 +19,8 @@ class _AddPageState extends State<AddPage> {
   DateTime _date = DateTime.now();
   String _expression = '';
   String _note = '';
+  Object? _gridKey, _keypadKey;
+  Widget? _grid, _keypad;
 
   List<String> get _categories => _income ? incomeCategories : expenseCategories;
 
@@ -82,49 +84,7 @@ class _AddPageState extends State<AddPage> {
               ),
             ),
             const SizedBox(height: 14),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: GridView.builder(
-                  key: ValueKey(_income),
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: _categories.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5,
-                    mainAxisExtent: 78,
-                    crossAxisSpacing: 7,
-                    mainAxisSpacing: 6,
-                  ),
-                  itemBuilder: (context, index) {
-                    final category = _categories[index];
-                    final selected = category == _selectedCategory;
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _selectedCategory = category);
-                      },
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CategoryAvatar(category: category, size: 48, selected: selected),
-                          const SizedBox(height: 5),
-                          Text(
-                            category,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                              color: selected ? (selected ? colorForCategory(category) : null) : Theme.of(context).textTheme.bodyMedium?.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
+            _categoryGrid(context),
             Container(
               margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
               padding: const EdgeInsets.fromLTRB(15, 13, 15, 12),
@@ -201,14 +161,73 @@ class _AddPageState extends State<AddPage> {
                 ],
               ),
             ),
-            _Keypad(
-              accentColor: activeColor,
-              onKey: (key) => _handleKey(key, store),
-            ),
+            _cachedKeypad(context, store, activeColor),
           ],
         ),
       ),
     );
+  }
+
+  Widget _categoryGrid(BuildContext context) {
+    final key = (_income, _selectedCategory, Theme.of(context));
+    if (key != _gridKey) {
+      _gridKey = key;
+      final categories = _categories;
+      final selectedCategory = _selectedCategory;
+      _grid = Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: GridView.builder(
+                  key: ValueKey(_income),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: categories.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 5,
+                    mainAxisExtent: 78,
+                    crossAxisSpacing: 7,
+                    mainAxisSpacing: 6,
+                  ),
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final selected = category == selectedCategory;
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _selectedCategory = category);
+                      },
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CategoryAvatar(category: category, size: 48, selected: selected),
+                          const SizedBox(height: 5),
+                          Text(
+                            category,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                              color: selected ? (selected ? colorForCategory(category) : null) : Theme.of(context).textTheme.bodyMedium?.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            );
+    }
+    return _grid!;
+  }
+
+  Widget _cachedKeypad(BuildContext context, AppStore store, Color activeColor) {
+    final key = (store, activeColor, Theme.of(context));
+    if (key != _keypadKey) {
+      _keypadKey = key;
+      _keypad = _Keypad(accentColor: activeColor, onKey: (key) => _handleKey(key, store));
+    }
+    return _keypad!;
   }
 
   Future<void> _pickDate() async {
@@ -231,7 +250,7 @@ class _AddPageState extends State<AddPage> {
 
   Future<void> _editNote(BuildContext context) async {
     final store = AppStoreScope.of(context);
-    final value = await showNotePicker(context, entries: store.entries,
+    final value = await showNotePicker(context, entries: store.entries, catalog: store.noteCatalog,
       income: _income, category: _selectedCategory, initial: _note);
     if (value != null && mounted) setState(() => _note = value);
   }
@@ -373,4 +392,5 @@ class _Keypad extends StatelessWidget {
     );
   }
 }
+
 

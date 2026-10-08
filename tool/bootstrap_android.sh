@@ -30,9 +30,11 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 
 @Suppress("DEPRECATION")
 class MainActivity : FlutterActivity() {
+    private val storageExecutor = Executors.newSingleThreadExecutor()
     private val channelName = "smart_budget/storage"
     private val requestSaveCsv = 4101
     private val requestPickCsv = 4102
@@ -53,27 +55,32 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelName
         ).setMethodCallHandler { call, result ->
-            val prefs = getSharedPreferences("smart_budget", MODE_PRIVATE)
             when (call.method) {
-                "loadCalendar" -> result.success(prefs.getString("calendar_state", null))
-                "saveCalendar" -> {
-                    val payload = call.arguments as? String
-                    if (payload == null) {
-                        result.error("INVALID_DATA", "Expected calendar JSON", null)
-                    } else if (prefs.edit().putString("calendar_state", payload).commit()) {
-                        result.success(null)
-                    } else {
-                        result.error("SAVE_FAILED", "Calendar cache was not saved", null)
+                "load", "loadCalendar" -> storageExecutor.execute {
+                    try {
+                        val key = if (call.method == "load") "app_state" else "calendar_state"
+                        val raw = getSharedPreferences("smart_budget", MODE_PRIVATE).getString(key, null)
+                        runOnUiThread { result.success(raw) }
+                    } catch (error: Exception) {
+                        runOnUiThread { result.error("READ_FAILED", error.message, null) }
                     }
                 }
-                "load" -> result.success(prefs.getString("app_state", null))
-                "save" -> {
+                "save", "saveCalendar" -> {
                     val payload = call.arguments as? String
                     if (payload == null) {
                         result.error("INVALID_DATA", "Expected a JSON string", null)
-                    } else {
-                        prefs.edit().putString("app_state", payload).apply()
-                        result.success(null)
+                    } else storageExecutor.execute {
+                        try {
+                            val key = if (call.method == "save") "app_state" else "calendar_state"
+                            val saved = getSharedPreferences("smart_budget", MODE_PRIVATE)
+                                .edit().putString(key, payload).commit()
+                            runOnUiThread {
+                                if (saved) result.success(null)
+                                else result.error("SAVE_FAILED", "Cache was not saved", null)
+                            }
+                        } catch (error: Exception) {
+                            runOnUiThread { result.error("SAVE_FAILED", error.message, null) }
+                        }
                     }
                 }
                 "saveCsv" -> {
@@ -119,6 +126,11 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onDestroy() {
+        storageExecutor.shutdown() // Allow queued writes to finish.
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -211,4 +223,5 @@ p.write_text(s)
 PY
 
 echo "Android host prepared."
+
 

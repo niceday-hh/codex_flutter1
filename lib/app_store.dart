@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'notes/note_catalog.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'models.dart';
@@ -6,13 +8,35 @@ import 'models.dart';
 class AppStore extends ChangeNotifier {
   AppStore() {
     _seed();
-    _restore();
+    ready = _restore();
   }
 
   static const _channel = MethodChannel('smart_budget/storage');
 
   final List<LedgerEntry> _entries = [];
   int _revision = 0;
+  late final Future<void> ready;
+  bool _restoring = true, _disposed = false;
+  final List<VoidCallback> _pendingRestoreEdits = [];
+  final Set<String> _changedPreferences = {};
+  bool _saveRequested = false;
+  Future<void>? _saving;
+  NoteCatalog? _noteCatalog;
+  final Map<(String, bool, int), List<String>> _quickNotes = {};
+
+  NoteCatalog get noteCatalog => _noteCatalog ??= NoteCatalog(entries);
+
+  void _mutateEntries(VoidCallback edit) {
+    if (_restoring) _pendingRestoreEdits.add(edit);
+    edit();
+    _changed();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   double monthlyBudget = 4000;
   int noteLimit = 12;
@@ -46,6 +70,8 @@ class AppStore extends ChangeNotifier {
   void _invalidateEntries() {
     _sortedEntries = null;
     _monthEntries.clear();
+    _noteCatalog = null;
+    _quickNotes.clear();
   }
 
   double incomeForMonth(DateTime month) => entriesForMonth(month)
@@ -73,16 +99,19 @@ class AppStore extends ChangeNotifier {
   }
 
   List<String> notesForCategory(String category, {required bool income}) {
-    final seen = <String>{};
-    final notes = <String>[];
-    for (final entry in entries.where((e) => e.category == category && e.isIncome == income)) {
-      final note = entry.note.trim();
-      if (note.isNotEmpty && seen.add(note)) {
-        notes.add(note);
-        if (notes.length >= noteLimit) break;
+    return _quickNotes.putIfAbsent((category, income, noteLimit), () {
+      final seen = <String>{};
+      final notes = <String>[];
+      for (final entry in entries) {
+        if (entry.category != category || entry.isIncome != income) continue;
+        final note = entry.note.trim();
+        if (note.isNotEmpty && seen.add(note)) {
+          notes.add(note);
+          if (notes.length >= noteLimit) break;
+        }
       }
-    }
-    return notes;
+      return List.unmodifiable(notes);
+    });
   }
 
   List<LedgerEntry> entriesForCategory(
@@ -106,7 +135,7 @@ class AppStore extends ChangeNotifier {
     required DateTime date,
     String note = '',
   }) {
-    _entries.add(LedgerEntry(
+    final entry = LedgerEntry(
       id: '${DateTime.now().microsecondsSinceEpoch}_${_revision++}',
       title: title,
       category: category,
@@ -114,8 +143,8 @@ class AppStore extends ChangeNotifier {
       isIncome: isIncome,
       date: date,
       note: note,
-    ));
-    _changed();
+    );
+    _mutateEntries(() => _entries.add(entry));
   }
 
   void updateEntry(
@@ -127,65 +156,62 @@ class AppStore extends ChangeNotifier {
     DateTime? date,
     String? note,
   }) {
-    final index = _entries.indexWhere((entry) => entry.id == id);
-    if (index < 0) return;
-    final current = _entries[index];
-    _entries[index] = LedgerEntry(
-      id: current.id,
-      title: title ?? current.title,
-      category: category ?? current.category,
-      amount: amount ?? current.amount,
-      isIncome: isIncome ?? current.isIncome,
-      date: date ?? current.date,
-      note: note ?? current.note,
-    );
-    _changed();
+    if (!_entries.any((entry) => entry.id == id)) return;
+    _mutateEntries(() {
+      final index = _entries.indexWhere((entry) => entry.id == id);
+      if (index < 0) return;
+      final current = _entries[index];
+      _entries[index] = LedgerEntry(
+        id: current.id, title: title ?? current.title,
+        category: category ?? current.category, amount: amount ?? current.amount,
+        isIncome: isIncome ?? current.isIncome, date: date ?? current.date,
+        note: note ?? current.note,
+      );
+    });
   }
 
   void deleteEntry(String id) {
-    _entries.removeWhere((entry) => entry.id == id);
-    _changed();
+    _mutateEntries(() => _entries.removeWhere((entry) => entry.id == id));
   }
 
   void setBudget(double value) {
     monthlyBudget = value.clamp(100, 9999999).toDouble();
-    _changed();
+    _changed(entriesChanged: false, preference: 'monthlyBudget');
   }
 
   void setCategoryBudget(String category, double value) {
     categoryBudgets[category] = value.clamp(0, 9999999).toDouble();
-    _changed();
+    _changed(entriesChanged: false, preference: 'categoryBudgets');
   }
 
   void setNoteLimit(int value) {
     noteLimit = value.clamp(4, 24);
-    _changed();
+    _changed(entriesChanged: false, preference: 'noteLimit');
   }
 
   void setHideAmounts(bool value) {
     hideAmounts = value;
-    _changed();
+    _changed(entriesChanged: false, preference: 'hideAmounts');
   }
 
   void setDailyReminder(bool value) {
     dailyReminder = value;
-    _changed();
+    _changed(entriesChanged: false, preference: 'dailyReminder');
   }
 
   void setDarkMode(bool value) {
     darkMode = value;
-    _changed();
+    _changed(entriesChanged: false, preference: 'darkMode');
   }
 
   void setReminderTime(int hour, int minute) {
     reminderHour = hour;
     reminderMinute = minute;
-    _changed();
+    _changed(entriesChanged: false, preference: 'reminderTime');
   }
 
   void clearEntries() {
-    _entries.clear();
-    _changed();
+    _mutateEntries(_entries.clear);
   }
 
   String displayMoney(double value, {bool signed = false}) {
@@ -276,15 +302,17 @@ class AppStore extends ChangeNotifier {
       ));
     }
 
-    if (replace) _entries.clear();
-    _entries.addAll(imported);
-    _changed();
+    _mutateEntries(() {
+      if (replace) _entries.clear();
+      _entries.addAll(imported);
+    });
     return imported.length;
   }
 
-  void _changed() {
-    _invalidateEntries();
-    notifyListeners();
+  void _changed({bool entriesChanged = true, String? preference}) {
+    if (entriesChanged) _invalidateEntries();
+    if (_restoring && preference != null) _changedPreferences.add(preference);
+    if (!_disposed) notifyListeners();
     _persist();
   }
 
@@ -292,52 +320,81 @@ class AppStore extends ChangeNotifier {
     try {
       final raw = await _channel.invokeMethod<String>('load');
       if (raw == null || raw.isEmpty) return;
-      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final decoded = raw.length >= 65536
+          ? await compute(_decodeLedger, raw, debugLabel: 'restore-ledger')
+          : _decodeLedger(raw);
+      final data = decoded.data;
       if (data.containsKey('entries')) {
-        final saved = (data['entries'] as List<dynamic>? ?? const [])
-            .map((e) => LedgerEntry.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _entries
-          ..clear()
-          ..addAll(saved);
+        _entries..clear()..addAll(decoded.entries);
       }
-      monthlyBudget = (data['monthlyBudget'] as num?)?.toDouble() ?? monthlyBudget;
-      noteLimit = (data['noteLimit'] as num?)?.toInt() ?? noteLimit;
-      hideAmounts = data['hideAmounts'] as bool? ?? hideAmounts;
-      dailyReminder = data['dailyReminder'] as bool? ?? dailyReminder;
-      darkMode = data['darkMode'] as bool? ?? darkMode;
-      reminderHour = (data['reminderHour'] as num?)?.toInt() ?? reminderHour;
-      reminderMinute = (data['reminderMinute'] as num?)?.toInt() ?? reminderMinute;
+      if (!_changedPreferences.contains('monthlyBudget')) monthlyBudget = (data['monthlyBudget'] as num?)?.toDouble() ?? monthlyBudget;
+      if (!_changedPreferences.contains('noteLimit')) noteLimit = (data['noteLimit'] as num?)?.toInt() ?? noteLimit;
+      if (!_changedPreferences.contains('hideAmounts')) hideAmounts = data['hideAmounts'] as bool? ?? hideAmounts;
+      if (!_changedPreferences.contains('dailyReminder')) dailyReminder = data['dailyReminder'] as bool? ?? dailyReminder;
+      if (!_changedPreferences.contains('darkMode')) darkMode = data['darkMode'] as bool? ?? darkMode;
+      if (!_changedPreferences.contains('reminderTime')) {
+        reminderHour = (data['reminderHour'] as num?)?.toInt() ?? reminderHour;
+        reminderMinute = (data['reminderMinute'] as num?)?.toInt() ?? reminderMinute;
+      }
       final savedBudgets = data['categoryBudgets'] as Map<String, dynamic>?;
-      if (savedBudgets != null) {
-        categoryBudgets
-          ..clear()
-          ..addAll(savedBudgets.map((key, value) => MapEntry(key, (value as num).toDouble())));
+      if (savedBudgets != null && !_changedPreferences.contains('categoryBudgets')) {
+        categoryBudgets..clear()..addAll(savedBudgets.map((key, value) => MapEntry(key, (value as num).toDouble())));
       }
+      for (final edit in _pendingRestoreEdits) { edit(); }
       _invalidateEntries();
-      notifyListeners();
+      if (_pendingRestoreEdits.isEmpty && data.containsKey('entries')) {
+        _sortedEntries = decoded.entries;
+        _noteCatalog = decoded.notes;
+      }
+      if (!_disposed) notifyListeners();
     } catch (_) {
       // A preview host may not expose the Android persistence channel.
+    } finally {
+      _restoring = false;
+      _pendingRestoreEdits.clear();
+      _changedPreferences.clear();
     }
   }
 
-  Future<void> _persist() async {
-    final payload = jsonEncode({
-      'monthlyBudget': monthlyBudget,
-      'noteLimit': noteLimit,
-      'hideAmounts': hideAmounts,
-      'dailyReminder': dailyReminder,
-      'darkMode': darkMode,
-      'reminderHour': reminderHour,
-      'reminderMinute': reminderMinute,
-      'categoryBudgets': categoryBudgets,
-      'entries': _entries.map((e) => e.toJson()).toList(),
+  void _persist() {
+    _saveRequested = true;
+    _startSaving();
+  }
+
+  void _startSaving() {
+    if (_saving != null) return;
+    _saving = _drainSaves().whenComplete(() {
+      _saving = null;
+      if (_saveRequested) _startSaving();
     });
-    try {
-      await _channel.invokeMethod<void>('save', payload);
-    } catch (_) {
-      // Keep the UI responsive when persistence is unavailable.
+  }
+
+  Future<void> _drainSaves() async {
+    // Read the previous on-disk state before a startup edit can replace it.
+    await ready;
+    while (_saveRequested) {
+      _saveRequested = false;
+      final snapshot = <String, Object?>{
+        'monthlyBudget': monthlyBudget, 'noteLimit': noteLimit,
+        'hideAmounts': hideAmounts, 'dailyReminder': dailyReminder,
+        'darkMode': darkMode, 'reminderHour': reminderHour,
+        'reminderMinute': reminderMinute,
+        'categoryBudgets': Map<String, double>.of(categoryBudgets),
+        'entries': List<LedgerEntry>.of(_entries),
+      };
+      try {
+        final payload = _entries.length >= 200
+            ? await compute(_encodeLedger, snapshot, debugLabel: 'save-ledger')
+            : _encodeLedger(snapshot);
+        await _channel.invokeMethod<void>('save', payload);
+      } catch (_) {
+        // Preserve the in-memory ledger when the storage host is unavailable.
+      }
     }
+  }
+
+  Future<void> flushPersistence() async {
+    while (_saving != null) { await _saving; }
   }
 
   void _seed() {
@@ -419,17 +476,47 @@ class AppStore extends ChangeNotifier {
   }
 }
 
-class AppStoreScope extends InheritedNotifier<AppStore> {
+class AppStoreScope extends InheritedNotifier<ChangeNotifier> {
   const AppStoreScope({
     super.key,
-    required AppStore store,
+    required this.store,
+    ChangeNotifier? updates,
     required super.child,
-  }) : super(notifier: store);
+  }) : super(notifier: updates ?? store);
+
+  final AppStore store;
+
+  static AppStore read(BuildContext context) {
+    final scope = context.getInheritedWidgetOfExactType<AppStoreScope>();
+    assert(scope != null, 'AppStoreScope not found');
+    return scope!.store;
+  }
 
   static AppStore of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppStoreScope>();
     assert(scope != null, 'AppStoreScope not found');
-    return scope!.notifier!;
+    return scope!.store;
   }
 }
 
+
+
+
+// Pure, sendable work: no platform calls or UI objects cross the isolate boundary.
+({Map<String, dynamic> data, List<LedgerEntry> entries, NoteCatalog notes}) _decodeLedger(String raw) {
+  final data = jsonDecode(raw) as Map<String, dynamic>;
+  final hasEntries = data.containsKey('entries');
+  final entries = (data.remove('entries') as List<dynamic>? ?? const [])
+      .map((e) => LedgerEntry.fromJson(e as Map<String, dynamic>)).toList()
+    ..sort((a,b) => b.date.compareTo(a.date));
+  // Keep the presence marker without retaining the decoded JSON rows twice.
+  if (hasEntries) data['entries'] = true;
+  final snapshot = List<LedgerEntry>.unmodifiable(entries);
+  return (data: data, entries: snapshot, notes: NoteCatalog(snapshot));
+}
+
+String _encodeLedger(Map<String, Object?> snapshot) {
+  final data = Map<String, Object?>.of(snapshot);
+  data['entries'] = (snapshot['entries'] as List<LedgerEntry>).map((e) => e.toJson()).toList();
+  return jsonEncode(data);
+}

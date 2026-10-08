@@ -31,7 +31,9 @@ class _SmartBudgetAppState extends State<SmartBudgetApp> {
     super.initState();
     store.addListener(_updateTheme);
     WidgetsBinding.instance.addObserver(CalendarUpdates.instance);
-    unawaited(CalendarUpdates.instance.autoCheck());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(CalendarUpdates.instance.autoCheck());
+    });
   }
 
   void _updateTheme() {
@@ -70,4 +72,5 @@ class _SmartBudgetAppState extends State<SmartBudgetApp> {
     );
   }
 }
+
 

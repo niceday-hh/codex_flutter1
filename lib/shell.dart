@@ -1,3 +1,5 @@
+import 'app_store.dart';
+import 'widgets/active_store_scope.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,7 +74,8 @@ class _AppShellState extends State<AppShell> {
                 for (var i = 0; i < _pages.length; i++)
                   TickerMode(
                     enabled: i == _index,
-                    child: _visited.contains(i) ? _pages[i] : const SizedBox.shrink(),
+                    child: _visited.contains(i) ? ActiveStoreScope(
+                      store: AppStoreScope.read(context), active: i == _index, child: _pages[i]) : const SizedBox.shrink(),
                   ),
               ],
             ),
@@ -272,4 +275,5 @@ class _WarmBackground extends StatelessWidget {
     );
   }
 }
+
 

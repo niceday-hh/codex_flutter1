@@ -15,6 +15,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late DateTime _month;
+  List<LedgerEntry>? _cachedItems;
+  double _expense = 0, _income = 0;
+  List<({LedgerEntry? entry, DateTime date, double expense, bool first, bool last})> _rows = [];
 
   @override
   void initState() {
@@ -43,6 +46,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final store = AppStoreScope.of(context);
     final items = store.entriesForMonth(_month);
+    if (!identical(items, _cachedItems)) {
+      _cachedItems = items;
     var expense = 0.0;
     var income = 0.0;
     for (final item in items) {
@@ -62,6 +67,12 @@ class _HomePageState extends State<HomePage> {
           first: i == 0, last: i == group.length - 1));
       }
     }
+
+      _expense = expense;
+      _income = income;
+      _rows = rows;
+    }
+    final expense = _expense, income = _income, rows = _rows;
 
     return CustomScrollView(
       key: const PageStorageKey<String>('home-scroll'),
@@ -328,7 +339,7 @@ class _HomePageState extends State<HomePage> {
   ) async {
     HapticFeedback.selectionClick();
     final initial = entry.note.isNotEmpty ? entry.note : entry.title;
-    final value = await showNotePicker(context, entries: store.entries,
+    final value = await showNotePicker(context, entries: store.entries, catalog: store.noteCatalog,
       income: entry.isIncome, category: entry.category, initial: initial);
     if (value == null) return;
     final clean = value.trim();
@@ -1245,4 +1256,5 @@ String _weekday(int weekday) {
   ];
   return names[weekday - 1];
 }
+
 

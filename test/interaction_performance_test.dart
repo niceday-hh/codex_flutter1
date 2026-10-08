@@ -138,7 +138,8 @@ void main() {
   testWidgets('numeric input reuses category grid and retains expense, income, note and keypad controls', (tester) async {
     tester.view.physicalSize=const Size(390,844);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
-    final store=AppStore();await tester.runAsync(()=>store.ready);
+    late AppStore store;
+    await tester.runAsync(() async { store=AppStore();await store.ready; });
     await tester.pumpWidget(AppStoreScope(store:store,child:MaterialApp(theme:buildTheme(),home:AddPage(onSaved:(){}))));
     await tester.pumpAndSettle();final grid=tester.widget<GridView>(find.byType(GridView));
     await tester.tap(find.text('1'));await tester.pumpAndSettle();
@@ -148,11 +149,12 @@ void main() {
     await tester.tap(find.text('完成'));await tester.pumpAndSettle();
     expect(store.entries.first.isIncome,isTrue);expect(store.entries.first.amount,1);
     expect(tester.takeException(),isNull);
-    await tester.runAsync(()=>store.flushPersistence());await tester.pumpWidget(const SizedBox.shrink());store.dispose();
+    await tester.pumpAndSettle();await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
 
   testWidgets('retained hidden page refreshes once on return and keeps its state', (tester) async {
-    final store=AppStore();await tester.runAsync(()=>store.ready);
+    late AppStore store;
+    await tester.runAsync(() async { store=AppStore();await store.ready; });
     final active=ValueNotifier<bool>(true);var builds=0,lastCount=0;
     final probe=StoreProbe(onBuild:(count){builds++;lastCount=count;});
     await tester.pumpWidget(MaterialApp(home:ValueListenableBuilder<bool>(valueListenable:active,builder:(_,value,__)=>ActiveStoreScope(store:store,active:value,child:probe))));
@@ -160,6 +162,6 @@ void main() {
     store.addEntry(title:'新增',category:'餐饮',amount:1,isIncome:false,date:DateTime.now());await tester.pumpAndSettle();
     expect(builds,baseline);
     active.value=true;await tester.pumpAndSettle();expect(builds,baseline+1);expect(lastCount,store.entries.length);
-    await tester.runAsync(()=>store.flushPersistence());await tester.pumpWidget(const SizedBox.shrink());active.dispose();store.dispose();
+    await tester.pumpAndSettle();await tester.pumpWidget(const SizedBox.shrink());active.dispose();store.dispose();
   });
 }

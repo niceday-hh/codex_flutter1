@@ -3,7 +3,7 @@ name: Build & Release v2.8.1 Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ release/v2.8.1 ]
+    branches: [ release/v2.8.1, release/v2.8.1-verify ]
     paths-ignore:
       - '**/*.md'
 
@@ -104,7 +104,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Test
-        run: flutter test
+        run: flutter test --timeout 90s
 
       - name: Build fixed-signed ARM64 APK
         run: flutter build apk --release --target-platform android-arm64

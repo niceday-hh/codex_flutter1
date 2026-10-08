@@ -81,6 +81,20 @@ void main() {
     store.dispose();
   });
 
+  test('preference-only restore does not replay startup additions twice', () async {
+    final load=Completer<String?>();
+    messenger.setMockMethodCallHandler(channel,(call) async {
+      if(call.method=='load') return load.future;
+      return null;
+    });
+    final store=AppStore();final initial=store.entries.length;
+    store.addEntry(title:'刚记',category:'餐饮',amount:2,isIncome:false,date:DateTime.now());
+    load.complete(jsonEncode({'monthlyBudget':6000}));
+    await store.ready;await store.flushPersistence();
+    expect(store.entries.length,initial+1);expect(store.monthlyBudget,6000);
+    store.dispose();
+  });
+
   test('saves stay ordered when edits arrive during an unfinished write', () async {
     final writing=Completer<void>(), release=Completer<void>();
     final saves=<Map<String,dynamic>>[];

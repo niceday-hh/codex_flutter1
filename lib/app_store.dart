@@ -340,7 +340,9 @@ class AppStore extends ChangeNotifier {
       if (savedBudgets != null && !_changedPreferences.contains('categoryBudgets')) {
         categoryBudgets..clear()..addAll(savedBudgets.map((key, value) => MapEntry(key, (value as num).toDouble())));
       }
-      for (final edit in _pendingRestoreEdits) { edit(); }
+      if (data.containsKey('entries')) {
+        for (final edit in _pendingRestoreEdits) { edit(); }
+      }
       _invalidateEntries();
       if (_pendingRestoreEdits.isEmpty && data.containsKey('entries')) {
         _sortedEntries = decoded.entries;

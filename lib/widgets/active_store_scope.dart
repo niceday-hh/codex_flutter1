@@ -11,12 +11,12 @@ class ActiveStoreScope extends StatefulWidget {
   State<ActiveStoreScope> createState() => _ActiveStoreScopeState();
 }
 class _ActiveStoreScopeState extends State<ActiveStoreScope> {
-  final _updates = ChangeNotifier();
+  final _updates = ValueNotifier<int>(0);
   bool _dirty = false;
   @override
   void initState() { super.initState(); widget.store.addListener(_changed); }
   void _changed() {
-    if (widget.active) _updates.notifyListeners();
+    if (widget.active) _updates.value++;
     else _dirty = true;
   }
   @override
@@ -27,7 +27,7 @@ class _ActiveStoreScopeState extends State<ActiveStoreScope> {
       widget.store.addListener(_changed);
       _dirty = true;
     }
-    if (widget.active && _dirty) { _dirty = false; _updates.notifyListeners(); }
+    if (widget.active && _dirty) { _dirty = false; _updates.value++; }
   }
   @override
   void dispose() { widget.store.removeListener(_changed); _updates.dispose(); super.dispose(); }

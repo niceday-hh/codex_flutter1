@@ -22,6 +22,25 @@ class AppStore extends ChangeNotifier {
   bool _saveRequested = false;
   Future<void>? _saving;
   NoteCatalog? _noteCatalog;
+  Future<NoteCatalog>? _noteCatalogTask;
+  int _catalogGeneration = 0;
+
+  Future<NoteCatalog> loadNoteCatalog() async {
+    await ready;
+    if (_noteCatalog != null) return _noteCatalog!;
+    if (_noteCatalogTask != null) return _noteCatalogTask!;
+    final generation = _catalogGeneration;
+    final snapshot = List<LedgerEntry>.unmodifiable(_entries);
+    final work = snapshot.length >= 200
+        ? compute(buildNoteCatalog, snapshot, debugLabel: 'collect-note-history')
+        : Future.value(buildNoteCatalog(snapshot));
+    final task = work.then((catalog) {
+      if (generation == _catalogGeneration) _noteCatalog = catalog;
+      return catalog;
+    });
+    _noteCatalogTask = task;
+    return task;
+  }
   final Map<(String, bool, int), List<String>> _quickNotes = {};
 
   NoteCatalog get noteCatalog => _noteCatalog ??= NoteCatalog(entries);
@@ -71,6 +90,8 @@ class AppStore extends ChangeNotifier {
     _sortedEntries = null;
     _monthEntries.clear();
     _noteCatalog = null;
+    _noteCatalogTask = null;
+    _catalogGeneration++;
     _quickNotes.clear();
   }
 

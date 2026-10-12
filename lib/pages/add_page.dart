@@ -1,3 +1,6 @@
+import 'package:flutter/gestures.dart';
+import '../entry_amount.dart';
+import '../widgets/animated_amount.dart';
 import '../widgets/note_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,10 +20,14 @@ class _AddPageState extends State<AddPage> {
   bool _income = false;
   String _selectedCategory = '餐饮';
   DateTime _date = DateTime.now();
-  String _expression = '';
+  final _amount = EntryAmountController();
+  bool _editingNote = false;
   String _note = '';
   Object? _gridKey, _keypadKey;
   Widget? _grid, _keypad;
+
+  @override
+  void dispose() { _amount.dispose(); super.dispose(); }
 
   List<String> get _categories => _income ? incomeCategories : expenseCategories;
 
@@ -28,7 +35,6 @@ class _AddPageState extends State<AddPage> {
   Widget build(BuildContext context) {
     final store = AppStoreScope.of(context);
     final quickNotes = store.notesForCategory(_selectedCategory, income: _income);
-    final amount = _evaluate(_expression);
     final activeColor = _income ? AppPalette.mint : AppPalette.primary;
 
     return Scaffold(
@@ -99,23 +105,22 @@ class _AddPageState extends State<AddPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        _expression.isEmpty ? '0' : _expression,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
-                      ),
-                      const Spacer(),
-                      Text(
-                        store.hideAmounts ? '••••' : '¥ ${_trim(amount)}',
-                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.8),
-                      ),
-                    ],
-                  ),
+                  ValueListenableBuilder<AmountDraft>(valueListenable: _amount,
+                    builder: (context, draft, _) => Row(children: [
+                      Expanded(child: Text(draft.expression.isEmpty ? '0' : draft.expression,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12))),
+                      const SizedBox(width: 8),
+                      AnimatedAmount(key: const ValueKey('entry-amount-value'),
+                        text: store.hideAmounts ? '••••' : '¥ ${_trim(draft.amount)}',
+                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
+                    ])),
                   Divider(height: 20, color: Theme.of(context).dividerColor),
                   GestureDetector(
+                    key: const ValueKey('entry-note-target'),
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _editNote(context),
-                    child: Row(
+                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: Row(
                       children: [
                         Expanded(
                           child: Text(
@@ -131,7 +136,7 @@ class _AddPageState extends State<AddPage> {
                         ),
                         const Icon(Icons.chevron_right_rounded),
                       ],
-                    ),
+                    )),
                   ),
                   if (quickNotes.isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -249,48 +254,28 @@ class _AddPageState extends State<AddPage> {
   }
 
   Future<void> _editNote(BuildContext context) async {
-    final store = AppStoreScope.of(context);
-    final value = await showNotePicker(context, entries: store.entries, catalog: store.noteCatalog,
-      income: _income, category: _selectedCategory, initial: _note);
-    if (value != null && mounted) setState(() => _note = value);
+    if (_editingNote) return;
+    _editingNote = true;
+    final store = AppStoreScope.read(context);
+    try {
+      final value = await showNotePicker(context, loadCatalog: store.loadNoteCatalog,
+        income: _income, category: _selectedCategory, initial: _note);
+      if (value != null && mounted) setState(() => _note = value);
+    } finally { _editingNote = false; }
   }
 
   void _handleKey(String key, AppStore store) {
-    HapticFeedback.selectionClick();
-    if (key == '完成') {
-      _save(store);
-      return;
-    }
+    if (key == '完成') { _save(store); return; }
     if (key == '今天') {
       setState(() => _date = DateTime.now());
-      return;
+    } else {
+      _amount.press(key);
     }
-    if (key == '⌫') {
-      if (_expression.isNotEmpty) setState(() => _expression = _expression.substring(0, _expression.length - 1));
-      return;
-    }
-    if (key == '+' || key == '-') {
-      if (_expression.isEmpty) return;
-      if (_expression.endsWith('+') || _expression.endsWith('-')) {
-        setState(() => _expression = '${_expression.substring(0, _expression.length - 1)}$key');
-      } else {
-        setState(() => _expression += key);
-      }
-      return;
-    }
-    if (key == '.') {
-      final segment = _expression.split(RegExp(r'[+-]')).last;
-      if (segment.contains('.')) return;
-      setState(() => _expression += segment.isEmpty ? '0.' : '.');
-      return;
-    }
-    final digits = _expression.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length >= 9) return;
-    setState(() => _expression += key);
+    HapticFeedback.selectionClick();
   }
 
   void _save(AppStore store) {
-    final amount = _evaluate(_expression);
+    final amount = _amount.value.amount;
     if (amount <= 0) {
       HapticFeedback.vibrate();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -310,22 +295,6 @@ class _AddPageState extends State<AddPage> {
     );
     HapticFeedback.mediumImpact();
     widget.onSaved();
-  }
-
-  static double _evaluate(String expression) {
-    if (expression.trim().isEmpty) return 0;
-    final parts = expression.split(RegExp(r'(?=[+-])|(?<=[+-])'));
-    var total = 0.0;
-    var operator = '+';
-    for (final part in parts) {
-      if (part == '+' || part == '-') {
-        operator = part;
-        continue;
-      }
-      final number = double.tryParse(part) ?? 0;
-      total = operator == '+' ? total + number : total - number;
-    }
-    return total.abs();
   }
 
   static String _trim(double value) => value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
@@ -357,12 +326,17 @@ class _Keypad extends StatelessWidget {
             child: Row(
               children: row.map((key) {
                 final complete = key == '完成';
+                final immediate = !complete && key != '今天';
                 return Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: GestureDetector(
-                      onTap: () => onKey(key),
-                      child: AnimatedContainer(
+                    child: Semantics(button: true, label: key, onTap: () => onKey(key), excludeSemantics: true,
+                      child: Listener(behavior: HitTestBehavior.opaque,
+                        onPointerDown: immediate ? (event) { if (event.buttons == kPrimaryButton) onKey(key); } : null,
+                        child: GestureDetector(behavior: HitTestBehavior.opaque,
+                          excludeFromSemantics: true,
+                          onTap: immediate ? null : () => onKey(key),
+                          child: AnimatedContainer(
                         duration: const Duration(milliseconds: 160),
                         height: 52,
                         alignment: Alignment.center,
@@ -381,7 +355,7 @@ class _Keypad extends StatelessWidget {
                                 ),
                               ),
                       ),
-                    ),
+                    ))),
                   ),
                 );
               }).toList(),

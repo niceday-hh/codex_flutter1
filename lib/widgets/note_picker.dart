@@ -6,18 +6,56 @@ export '../notes/note_catalog.dart' show NoteChoice, collectNotes;
 import 'common.dart';
 
 Future<String?> showNotePicker(BuildContext context, {
-  required List<LedgerEntry> entries, required bool income,
+  List<LedgerEntry> entries = const [], required bool income,
   required String category, required String initial, NoteCatalog? catalog,
+  Future<NoteCatalog> Function()? loadCatalog,
 }) {
-  final notes = catalog?.forMode(income) ?? collectNotes(entries, income);
   return showModalBottomSheet<String>(context: context, isScrollControlled: true,
   useSafeArea: true, showDragHandle: true,
-  builder: (_) => NotePicker(notes: notes, category: category, initial: initial));
+  sheetAnimationStyle: const AnimationStyle(duration: Duration(milliseconds: 180), reverseDuration: Duration(milliseconds: 140)),
+  builder: (_) => _AsyncNotePicker(category: category, initial: initial, income: income,
+    load: loadCatalog ?? () async => catalog ?? buildNoteCatalog(entries)));
+
+}
+
+class _AsyncNotePicker extends StatefulWidget {
+  const _AsyncNotePicker({required this.load, required this.category, required this.initial, required this.income});
+  final Future<NoteCatalog> Function() load;
+  final String category, initial;
+  final bool income;
+  @override
+  State<_AsyncNotePicker> createState() => _AsyncNotePickerState();
+}
+class _AsyncNotePickerState extends State<_AsyncNotePicker> {
+  List<NoteChoice> _notes = const [];
+  PreparedNotes? _prepared;
+  bool _loading = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _load(); });
+  }
+  Future<void> _load() async {
+    try {
+      final catalog = await widget.load();
+      if (!mounted) return;
+      final prepared = await catalog.prepare(widget.income, widget.category);
+      if (!mounted) return;
+      setState(() { _notes = catalog.forMode(widget.income); _prepared = prepared; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+  @override
+  Widget build(BuildContext context) => NotePicker(notes: _notes, prepared: _prepared,
+    loading: _loading, category: widget.category, initial: widget.initial);
 }
 
 class NotePicker extends StatefulWidget {
-  const NotePicker({super.key, required this.notes, required this.category, required this.initial});
+  const NotePicker({super.key, required this.notes, required this.category, required this.initial, this.prepared, this.loading = false});
   final List<NoteChoice> notes;
+  final PreparedNotes? prepared;
+  final bool loading;
   final String category, initial;
   @override
   State<NotePicker> createState() => _NotePickerState();
@@ -32,9 +70,13 @@ class _NotePickerState extends State<NotePicker> {
 
   List<NoteChoice> _visibleNotes() {
     final query = _search.text.trim().toLowerCase();
-    final key = (widget.notes, query, _tab, _categoryOnly, widget.category);
+    final key = (widget.notes, widget.prepared, query, _tab, _categoryOnly, widget.category);
     if (key == _visibleKey) return _visible;
     _visibleKey = key;
+    if (widget.prepared != null) {
+      final view = widget.prepared!.view(_tab, _categoryOnly);
+      return _visible = query.isEmpty ? view : view.where((n) => n.text.toLowerCase().contains(query)).toList();
+    }
     final notes = widget.notes.where((n) => (!_categoryOnly || n.categories.contains(widget.category)) && n.text.toLowerCase().contains(query)).toList();
     notes.sort((a,b) {
       final value = _tab == 0 ? b.count.compareTo(a.count) : _tab == 1 ? b.latest.compareTo(a.latest) : a.text.compareTo(b.text);
@@ -62,7 +104,7 @@ class _NotePickerState extends State<NotePicker> {
           PillTabs(labels: const ['常用','最近','全部'], index: _tab, onChanged: (i) => setState(() { _tab = i; if (i == 2) _categoryOnly = false; })),
           Row(children: [FilterChip(label: Text('仅${widget.category}'), selected: _categoryOnly, onSelected: (v) => setState(() => _categoryOnly = v)), const SizedBox(width: 10), Text('${notes.length} 个备注', style: theme.textTheme.bodySmall)]),
           Expanded(child: ValueListenableBuilder<TextEditingValue>(valueListenable: _draft,
-            builder: (context, value, _) => notes.isEmpty ? const Center(child: Text('没有匹配的备注，可在下方填写新备注')) : _tab == 2
+            builder: (context, value, _) => widget.loading ? const Center(child: CircularProgressIndicator()) : notes.isEmpty ? const Center(child: Text('没有匹配的备注，可在下方填写新备注')) : _tab == 2
             ? ListView.builder(itemCount: notes.length, itemBuilder: (_, i) {
               final n = notes[i];
               return ListTile(contentPadding: EdgeInsets.zero, title: Text(n.text), subtitle: Text(n.categories.join(' · ')), trailing: _draft.text == n.text ? const Icon(Icons.check_circle) : Text('${n.count} 次'), onTap: () => _select(n.text));

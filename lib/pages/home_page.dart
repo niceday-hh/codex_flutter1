@@ -339,7 +339,7 @@ class _HomePageState extends State<HomePage> {
   ) async {
     HapticFeedback.selectionClick();
     final initial = entry.note.isNotEmpty ? entry.note : entry.title;
-    final value = await showNotePicker(context, entries: store.entries, catalog: store.noteCatalog,
+    final value = await showNotePicker(context, loadCatalog: store.loadNoteCatalog,
       income: entry.isIncome, category: entry.category, initial: initial);
     if (value == null) return;
     final clean = value.trim();

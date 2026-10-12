@@ -79,7 +79,10 @@ void main() {
     final rect=tester.getRect(target);expect(rect.height,greaterThanOrEqualTo(48));
     await tester.tapAt(Offset(rect.left+rect.width/2,rect.top+2));await tester.pump();
     expect(find.text('选个备注'),findsOneWidget);
-    await tester.pumpAndSettle();expect(tester.takeException(),isNull);
+    // Let the real-zone restore callbacks reach the widget test's fake clock.
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip),findsWidgets);expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
 

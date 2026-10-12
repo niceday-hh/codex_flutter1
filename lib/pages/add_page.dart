@@ -112,7 +112,7 @@ class _AddPageState extends State<AddPage> {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12))),
                       const SizedBox(width: 8),
                       AnimatedAmount(key: const ValueKey('entry-amount-value'),
-                        text: store.hideAmounts ? '••••' : '¥ ${_trim(draft.amount)}',
+                        text: store.hideAmounts ? '••••' : '¥ ${draft.displayAmount}',
                         style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
                     ])),
                   Divider(height: 20, color: Theme.of(context).dividerColor),
@@ -297,7 +297,6 @@ class _AddPageState extends State<AddPage> {
     widget.onSaved();
   }
 
-  static String _trim(double value) => value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 class _Keypad extends StatelessWidget {

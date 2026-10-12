@@ -180,33 +180,7 @@ class MainActivity : FlutterActivity() {
 }
 KOTLIN
 
-mkdir -p android/app/src/main/res/drawable \
-         android/app/src/main/res/mipmap-anydpi-v26 \
-         android/app/src/main/res/values
-cat > android/app/src/main/res/values/smart_budget_colors.xml <<'XML'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="smart_budget_icon_bg">#FFF5E4</color>
-</resources>
-XML
-cat > android/app/src/main/res/drawable/ic_smart_budget_foreground.xml <<'XML'
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#F2A722" android:pathData="M54,14 C75,14 92,31 92,54 C92,77 75,94 54,94 C31,94 14,77 14,54 C14,31 31,14 54,14 Z"/>
-    <path android:fillColor="#1D2C38" android:pathData="M50,30 H58 V46 H73 V54 H58 V78 H50 V58 C44,64 38,68 31,72 L27,65 C36,60 44,52 50,43 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M68,28 C75,27 80,31 82,37 C75,39 69,37 66,32 Z"/>
-</vector>
-XML
-cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'XML'
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/smart_budget_icon_bg" />
-    <foreground android:drawable="@drawable/ic_smart_budget_foreground" />
-</adaptive-icon>
-XML
+python3 tool/generate_launcher_icons.py --res android/app/src/main/res
 
 MANIFEST="android/app/src/main/AndroidManifest.xml"
 python3 - "$MANIFEST" <<'PY'

@@ -28,7 +28,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('voice-confirm')));await tester.pumpAndSettle();
     expect(store.entries.length,before+1);expect(store.entries.first.amount,28.5);
     expect(store.entries.first.category,'餐饮');expect(store.entries.first.note,'牛肉面');
-    expect(engine.closed,isTrue);expect(tester.takeException(),isNull);
+    await tester.pump();expect(engine.closed,isTrue);expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
   testWidgets('rerecord discards old fields; drag dismiss never saves', (tester) async {
@@ -37,7 +37,7 @@ void main() {
     expect(find.text('¥ 28.50'),findsNothing);
     engine.text='收到工资8000元';await record(tester);expect(find.text('¥ 8000.00'),findsOneWidget);
     await tester.drag(find.text('下拉关闭'),const Offset(0,500));await tester.pumpAndSettle();
-    expect(find.text('确认这笔账'),findsNothing);expect(store.entries.length,before);expect(engine.closed,isTrue);
+    expect(find.text('确认这笔账'),findsNothing);expect(store.entries.length,before);await tester.pump();expect(engine.closed,isTrue);
     expect(tester.takeException(),isNull);await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
   testWidgets('missing amount requires input and cannot save incomplete draft', (tester) async {

@@ -52,8 +52,11 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
   body = body.replaceAll(RegExp(r'(?:今天|昨天|前天|大前天|昨晚|刚才|刚刚|早上|中午|晚上|上午|下午)'), ' ')
     .replaceAll(RegExp(r'(?:\d{1,2}|[一二三四五六七八九十]+)[点时](?:半|(?:\d{1,2}|[一二三四五六七八九十]+)分)?(?=\s|[,，]|花|买|吃|喝|付|收到|打车|$)'), ' ');
   // Negated income phrases must not turn purchases into income.
-  final typeBody = body.replaceAll(RegExp(r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到|收入|到账|报销|退款|发工资|工资)'), ' ');
-  final income = !body.contains('支出') && RegExp(r'收入|进账|到账|收到|收到了|收款|赚了|挣了|薪水|工资|奖金|利息|分红|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody)
+  final typeBody = body.replaceAll(RegExp(r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到(?:工资|薪水|奖金)?|收入|到账|报销|退款|发工资|工资)'), ' ');
+  final explicitIncome = RegExp(r'收入|进账|到账|收到|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody);
+  final implicitIncome = RegExp(r'薪水|工资|奖金|利息|分红').hasMatch(typeBody)
+    && !RegExp(r'买|购买|花|支付|付给|转给|还没|没发|没有').hasMatch(body);
+  final income = !body.contains('支出') && (explicitIncome || implicitIncome)
     && !RegExp(r'(?:转给|给别人|还给|付给|借给)').hasMatch(typeBody);
   final candidates = <_Money>[];
   void add(RegExp pattern, double Function(RegExpMatch) value) {

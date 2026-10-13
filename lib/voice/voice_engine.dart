@@ -25,6 +25,7 @@ class ParaformerVoiceEngine implements VoiceEngine {
   SendPort? _commands;
   Isolate? _worker;
   Future<void>? _preparing;
+  Future<void>? _closing;
   String? _recordPath;
   String? _cacheDir;
   bool _closed = false;
@@ -108,12 +109,14 @@ class ParaformerVoiceEngine implements VoiceEngine {
     _worker?.kill(); _worker = null; _commands = null;
   }
   @override
-  Future<void> close() async {
+  Future<void> close() => _closing ??= _close();
+  Future<void> _close() async {
     if (_closed) return;
     _closed = true;
     try { await cancel(); await _preparing; } catch (_) {}
     await _closeWorker();
-    await _recorder.dispose(); await _levels.close();
+    try { await _recorder.dispose(); } catch (_) {}
+    await _levels.close();
   }
 }
 

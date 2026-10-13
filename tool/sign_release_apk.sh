@@ -17,6 +17,6 @@ trap 'rm -f "$ALIGNED" "$SIGNED"' EXIT
   --v1-signing-enabled true --v2-signing-enabled true \
   --v3-signing-enabled true --v4-signing-enabled false \
   --v1-signer-name CERT --out "$SIGNED" "$ALIGNED"
-"$TOOLS_DIR/apksigner" verify --verbose --print-certs "$SIGNED"
+"$TOOLS_DIR/apksigner" verify --min-sdk-version 23 --verbose --print-certs "$SIGNED"
 "$TOOLS_DIR/zipalign" -c -P 16 4 "$SIGNED"
 mv "$SIGNED" "$INPUT"

@@ -131,6 +131,17 @@ jobs:
           printf '0bb2de9cfe689fe9c43385035d2066527150c638586c9e29996fbb76fedb984b  %s\n' "$OLD_APK" | sha256sum -c -
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$APKSIGNER" verify --verbose --print-certs "$OLD_APK"
+          python3 - "$OLD_APK" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              certs = [n for n in apk.namelist() if n.startswith('META-INF/') and n.endswith(('.RSA', '.EC', '.DSA', '.SF'))]
+              print('Previous published APK traditional certificate entries:', certs)
+          PY
+          if java tool/VerifyApkCertificates.java "$OLD_APK" 7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95; then
+            echo 'Previous published APK also has valid V1 certificates; the device refusal is not proven to be missing V1'
+          else
+            echo 'Previous published APK has no valid extractable V1 certificate'
+          fi
 
       - name: Build fixed-signed ARM64 APK
         run: flutter build apk --release --target-platform android-arm64
@@ -163,7 +174,7 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           INPUT="build/app/outputs/flutter-apk/app-release.apk"
-          "$APKSIGNER" verify --verbose --print-certs "$INPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
+          "$APKSIGNER" verify --min-sdk-version 23 --verbose --print-certs "$INPUT" | tee "$RUNNER_TEMP/apksigner-verify.txt"
           grep -qi 'Verified using v1 scheme (JAR signing): true' "$RUNNER_TEMP/apksigner-verify.txt"
           grep -qi 'Verified using v3 scheme (APK Signature Scheme v3): true' "$RUNNER_TEMP/apksigner-verify.txt"
           java tool/VerifyApkCertificates.java "$INPUT" 7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95
@@ -204,7 +215,7 @@ jobs:
           (cd "$CHECK_DIR" && sha256sum -c "${{ steps.meta.outputs.apk_name }}.sha256")
           cmp "$APK" "$CHECK_DIR/${{ steps.meta.outputs.apk_name }}"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
-          "$APKSIGNER" verify --verbose --print-certs "$CHECK_DIR/${{ steps.meta.outputs.apk_name }}"
+          "$APKSIGNER" verify --min-sdk-version 23 --verbose --print-certs "$CHECK_DIR/${{ steps.meta.outputs.apk_name }}"
           java tool/VerifyApkCertificates.java "$CHECK_DIR/${{ steps.meta.outputs.apk_name }}" 7f343bb419d22378ed5bde6e754f51243ad984c1e88004fa133b8afe9be3cd95
           echo 'Published APK round-trip SHA256 and V1/V2/V3 signing verified'
 

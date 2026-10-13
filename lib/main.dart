@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'calendar/calendar_updates.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'app_store.dart';
 import 'app_theme.dart';
@@ -8,6 +9,10 @@ import 'shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithParagraphs(['Paraformer-zh / FunASR'], await rootBundle.loadString('assets/licenses/FunASR_MODEL_LICENSE.txt'));
+    yield LicenseEntryWithParagraphs(['离线语音模型来源'], await rootBundle.loadString('assets/licenses/VOICE_NOTICE.txt'));
+  });
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const SmartBudgetApp());
 }

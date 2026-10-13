@@ -1,0 +1,10 @@
+拾光账本离线语音识别
+模型：Paraformer-zh INT8 (220M)
+模型原作者：FunASR / Alibaba Group
+模型转换与运行库：sherpa-onnx / Fangjun Kuang / next-gen Kaldi
+模型来源：https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09
+上游来源：https://github.com/modelscope/FunASR
+运行库：https://github.com/k2-fsa/sherpa-onnx
+模型许可：FunASR Model Open Source License Agreement v1.1，见同目录 FunASR_MODEL_LICENSE.txt。
+运行库许可：Apache-2.0。
+本应用采用本地规则拆分记账字段。语音不上传服务器，仅在用户确认后保存账目。

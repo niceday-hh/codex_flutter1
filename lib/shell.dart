@@ -1,4 +1,5 @@
 import 'app_store.dart';
+import 'voice/voice_sheet.dart';
 import 'widgets/active_store_scope.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   final Set<int> _visited = {0};
   bool _adding = false;
+  final _addButtonKey = GlobalKey();
 
   static const _pages = <Widget>[
     RepaintBoundary(child: HomePage()),
@@ -54,6 +56,31 @@ class _AppShellState extends State<AppShell> {
     } finally {
       _adding = false;
     }
+  }
+
+  Future<void> _voiceOptions() async {
+    if (_adding) return;
+    HapticFeedback.lightImpact();
+    final anchor = _addButtonKey.currentContext!.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final origin = anchor.localToGlobal(Offset.zero, ancestor: overlay);
+    final selected = await showMenu<String>(context: context,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      position: RelativeRect.fromRect(Rect.fromLTWH(origin.dx - 55, origin.dy - 90, 180, 80), Offset.zero & overlay.size),
+      items: [const PopupMenuItem(value: 'voice', child: Row(children: [
+        Icon(Icons.mic_rounded, color: AppPalette.mint), SizedBox(width: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('语音记账', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text('按住说话，松开识别', style: TextStyle(fontSize: 11))])]))]);
+    if (selected != 'voice' || !mounted || _adding) return;
+    _adding = true;
+    try {
+      final saved = await showVoiceEntry(context, AppStoreScope.read(context));
+      if (saved == true && mounted) {
+        _goTo(0);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已记下这笔账')));
+      }
+    } finally { _adding = false; }
   }
 
   @override
@@ -123,7 +150,9 @@ class _AppShellState extends State<AppShell> {
                           offset: const Offset(0, 0),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
+                            key: _addButtonKey,
                             onTap: _openAdd,
+                            onLongPress: _voiceOptions,
                             child: SizedBox(
                               width: 70,
                               height: 70,

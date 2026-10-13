@@ -35,6 +35,7 @@ import java.util.concurrent.Executors
 @Suppress("DEPRECATION")
 class MainActivity : FlutterActivity() {
     private val storageExecutor = Executors.newSingleThreadExecutor()
+    private val voiceAssets = VoiceAssets(this)
     private val channelName = "smart_budget/storage"
     private val requestSaveCsv = 4101
     private val requestPickCsv = 4102
@@ -51,6 +52,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        voiceAssets.attach(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName
@@ -129,6 +131,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        voiceAssets.close()
         storageExecutor.shutdown() // Allow queued writes to finish.
         super.onDestroy()
     }
@@ -180,6 +183,7 @@ class MainActivity : FlutterActivity() {
 }
 KOTLIN
 
+cp tool/native_voice/VoiceAssets.kt android/app/src/main/kotlin/com/shiguang/smart_budget/VoiceAssets.kt
 python3 tool/generate_launcher_icons.py --res android/app/src/main/res
 
 MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -190,6 +194,8 @@ p = Path(sys.argv[1])
 s = p.read_text()
 if 'android.permission.INTERNET' not in s:
     s = s.replace('<application', '<uses-permission android:name="android.permission.INTERNET" />\n    <application', 1)
+if 'android.permission.RECORD_AUDIO' not in s:
+    s = s.replace('<application', '<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />\n    <application', 1)
 s = s.replace('android:label="smart_budget"', 'android:label="拾光账本"')
 if 'android:hardwareAccelerated=' not in s:
     s = s.replace('<application\n', '<application\n        android:hardwareAccelerated="true"\n')

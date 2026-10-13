@@ -10,3 +10,6 @@ android/
 key.properties
 .env
 .DS_Store
+
+
+.voice-model-cache/

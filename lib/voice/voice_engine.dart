@@ -144,8 +144,8 @@ void _recognizerWorker(List<dynamic> args) {
         if (power / wave.samples.length < .000001) throw StateError('声音太轻或未检测到语音，请重试');
         stream = recognizer!.createStream();
         stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-        recognizer!.decode(stream);
-        output.send(['done', id, recognizer!.getResult(stream).text]);
+        recognizer.decode(stream);
+        output.send(['done', id, recognizer.getResult(stream).text]);
       } catch (error) { output.send(['error', id, '$error']); }
       finally { stream?.free(); }
     });

@@ -40,9 +40,9 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
   } else if (body.contains('大前天')) { date = today.subtract(const Duration(days: 3)); }
   else if (body.contains('前天')) { date = today.subtract(const Duration(days: 2)); }
   else if (body.contains('昨天') || body.contains('昨晚')) { date = today.subtract(const Duration(days: 1)); }
-  final weekday = RegExp(r'(上周|这周|本周)?(?:周|星期|礼拜)([一二三四五六日天])').firstMatch(body);
+  final weekday = RegExp(r'(上周|这周|本周)(?:星期|礼拜)?([一二三四五六日天])|(?:周|星期|礼拜)([一二三四五六日天])').firstMatch(body);
   if (weekday != null) {
-    final target = '一二三四五六日'.indexOf(weekday[2]!.replaceAll('天', '日')) + 1;
+    final target = '一二三四五六日'.indexOf((weekday[2] ?? weekday[3])!.replaceAll('天', '日')) + 1;
     var offset = today.weekday - target;
     if (weekday[1] == '上周') { offset += 7; }
     else if (weekday[1] == null && offset < 0) { offset += 7; }
@@ -53,7 +53,7 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
     .replaceAll(RegExp(r'(?:\d{1,2}|[一二三四五六七八九十]+)[点时](?:半|(?:\d{1,2}|[一二三四五六七八九十]+)分)?(?=\s|[,，]|花|买|吃|喝|付|收到|打车|$)'), ' ');
   // Negated income phrases must not turn purchases into income.
   final typeBody = body.replaceAll(RegExp(r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到|收入|到账|报销|退款|发工资|工资)'), ' ');
-  final income = RegExp(r'收入|进账|到账|收到|收到了|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody)
+  final income = !body.contains('支出') && RegExp(r'收入|进账|到账|收到|收到了|收款|赚了|挣了|薪水|工资|奖金|利息|分红|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody)
     && !RegExp(r'(?:转给|给别人|还给|付给|借给)').hasMatch(typeBody);
   final candidates = <_Money>[];
   void add(RegExp pattern, double Function(RegExpMatch) value) {
@@ -84,7 +84,7 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
     // Bare amounts are accepted only when not followed by a quantity/date unit.
     for (final m in RegExp(_number).allMatches(body)) {
       final suffix = body.substring(m.end);
-      if (RegExp(r'^\s*(?:个|杯|件|瓶|份|斤|公斤|千克|包|张|次|年|月|日|号|点|时|分钟|公里|人|折)').hasMatch(suffix)) continue;
+      if (RegExp(r'^\s*(?:个|杯|件|瓶|份|斤|公斤|千克|包|张|次|年|月|日|号|点|时|分钟|公里|人|折|笔)').hasMatch(suffix)) continue;
       candidates.add(_Money(m.start, m.end, mandarinNumber(m[0]!), 0));
     }
     if (candidates.isNotEmpty) warnings.add('未说金额单位，请核对金额');

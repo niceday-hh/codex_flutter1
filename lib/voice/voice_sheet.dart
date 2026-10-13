@@ -30,7 +30,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && _session.stage == VoiceStage.recording) {
+    if (state != AppLifecycleState.resumed && [VoiceStage.starting, VoiceStage.recording].contains(_session.stage)) {
       unawaited(_session.cancelHold());
     }
   }
@@ -73,13 +73,28 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
   Future<void> _editCategory() async {
     final draft = _session.draft!;
     final categories = draft.isIncome ? incomeCategories.where((x) => x != '设置').toList() : expenseCategories;
-    final selected = await showModalBottomSheet<String>(context: context, isScrollControlled: true,
-      builder: (c) => SafeArea(child: SizedBox(height: MediaQuery.sizeOf(c).height * .55,
-        child: Column(children: [const Padding(padding: EdgeInsets.all(20), child: Text('选择分类', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
-          Expanded(child: GridView.builder(padding: const EdgeInsets.fromLTRB(16, 0, 16, 20), itemCount: categories.length,
+    final selected = await showModalBottomSheet<String>(
+      context: context, isScrollControlled: true,
+      builder: (c) => SafeArea(child: SizedBox(
+        height: MediaQuery.sizeOf(c).height * .55,
+        child: Column(children: [
+          const Padding(padding: EdgeInsets.all(20), child: Text('选择分类',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+          Expanded(child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            itemCount: categories.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, mainAxisExtent: 70),
-            itemBuilder: (_, i) => InkWell(onTap: () => Navigator.pop(c, categories[i]), child: Column(mainAxisAlignment: MainAxisAlignment.center,
-              children: [Text(emojiForCategory(categories[i]), style: const TextStyle(fontSize: 24)), Text(categories[i])])))]))));
+            itemBuilder: (_, i) => InkWell(
+              onTap: () => Navigator.pop(c, categories[i]),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(emojiForCategory(categories[i]), style: const TextStyle(fontSize: 24)),
+                Text(categories[i]),
+              ]),
+            ),
+          )),
+        ]),
+      )),
+    );
     if (selected != null && mounted) _session.edit(draft.copyWith(category: selected));
   }
   Future<void> _save() async {

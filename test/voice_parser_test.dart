@@ -20,7 +20,7 @@ void main() {
     for (final c in cases.entries) { expect(parse(c.key).category, c.value, reason:c.key); }
   });
   test('income and refunds, expense negation and explicit categories', () {
-    for (final text in ['收到工资8000元','工资到账八千元','退款十二元','报销交通费50元','收到奖金500元']) {
+    for (final text in ['收到工资8000元','工资到账八千元','退款十二元','报销交通费50元','收到奖金500元','工资八千元']) {
       expect(parse(text).isIncome, isTrue, reason:text);
     }
     expect(parse('收到工资8000元').category, '工资');
@@ -45,6 +45,8 @@ void main() {
     expect(parse('买两杯奶茶').amount,isNull);
     expect(parse('上午十点打车23元').amount,23);
     expect(parse('上周星期一午饭28元').date.day,5);
+    expect(parse('上周一午饭28元').date.day,5);
+    expect(parse('记一笔奶茶').amount,isNull);
     expect(parse('2月31日午饭28元').warnings,contains('日期不明确，请核对'));
   });
   test('ambiguous multiple transactions require a reviewed total', () {

@@ -10,8 +10,8 @@ import 'shell.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithParagraphs(['Paraformer-zh / FunASR'], await rootBundle.loadString('assets/licenses/FunASR_MODEL_LICENSE.txt'));
-    yield LicenseEntryWithParagraphs(['离线语音模型来源'], await rootBundle.loadString('assets/licenses/VOICE_NOTICE.txt'));
+    yield LicenseEntryWithLineBreaks(['Paraformer-zh / FunASR'], await rootBundle.loadString('assets/licenses/FunASR_MODEL_LICENSE.txt'));
+    yield LicenseEntryWithLineBreaks(['离线语音模型来源'], await rootBundle.loadString('assets/licenses/VOICE_NOTICE.txt'));
   });
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const SmartBudgetApp());

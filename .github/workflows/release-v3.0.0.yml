@@ -113,7 +113,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VOICE_LIBRARY="$(find "$HOME/.pub-cache" -path '*sherpa_onnx_linux*' -name libsherpa-onnx-c-api.so | head -1)"
+          VOICE_LIBRARY="$(find "$HOME/.pub-cache" -path '*sherpa_onnx_linux*/linux/x64/*' -name libsherpa-onnx-c-api.so | head -1)"
           test -n "$VOICE_LIBRARY"
           export LD_LIBRARY_PATH="$(dirname "$VOICE_LIBRARY"):${LD_LIBRARY_PATH:-}"
           dart run tool/voice_smoke.dart

@@ -8,10 +8,18 @@ import 'voice_engine.dart';
 import 'voice_parser.dart';
 import 'voice_session.dart';
 
-Future<bool?> showVoiceEntry(BuildContext context, AppStore store, {VoiceEngine? engine}) =>
-  showModalBottomSheet<bool>(context: context, isScrollControlled: true, enableDrag: true,
-    backgroundColor: Colors.transparent, barrierColor: Colors.black45,
-    builder: (_) => VoiceEntrySheet(store: store, engine: engine ?? ParaformerVoiceEngine()));
+Future<bool?> showVoiceEntry(BuildContext context, AppStore store, {VoiceEngine? engine}) async {
+  final activeEngine = engine ?? ParaformerVoiceEngine();
+  try {
+    return await showModalBottomSheet<bool>(context: context, isScrollControlled: true, enableDrag: true,
+      backgroundColor: Colors.transparent, barrierColor: Colors.black45,
+      builder: (_) => VoiceEntrySheet(store: store, engine: activeEngine));
+  } finally {
+    // Route completion is independent of exit-animation widget disposal.
+    // Explicitly end microphone/inference lifetime on every dismissal path.
+    await activeEngine.close();
+  }
+}
 
 class VoiceEntrySheet extends StatefulWidget {
   const VoiceEntrySheet({super.key, required this.store, required this.engine});

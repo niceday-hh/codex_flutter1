@@ -1,0 +1,95 @@
+name: Validate iPhone 13 iOS port
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ios/**']
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'integration_test/**'
+      - 'tool/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and print tool versions
+        run: |
+          if [[ -d /Applications/Xcode_26.0.app ]]; then
+            sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
+          fi
+          xcodebuild -version
+          pod --version
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Prepare iOS host
+        run: |
+          flutter config --no-enable-swift-package-manager
+          bash tool/bootstrap_ios.sh
+          python3 -m unittest discover -s tool/tests -v
+      - name: Prepare the verified offline model and inference sample
+        run: python3 tool/prepare_voice_model.py --platform ios --include-smoke-audio
+      - name: Resolve packages, analyze and run Flutter regressions
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test --timeout 90s
+      - name: Create iPhone 13 simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x.get("isAvailable") and ".iOS-" in x["identifier"]]; print(sorted(r,key=lambda x:tuple(map(int,x["version"].split("."))))[-1]["identifier"])')
+          DEVICE=$(xcrun simctl create 'Shiguang iPhone 13' com.apple.CoreSimulator.SimDeviceType.iPhone-13 "$RUNTIME")
+          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Test real native channels and offline inference
+        run: flutter test integration_test/ios_host_test.dart -d '${{ steps.simulator.outputs.device }}' --timeout 300s
+      - name: Build the app UI and test native persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          flutter build ios --simulator --debug --no-pub --target lib/main.dart
+          xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device }}' \
+            -derivedDataPath build/ios-native-tests -resultBundlePath artifacts/native-tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+          xcrun simctl install '${{ steps.simulator.outputs.device }}' build/ios/iphonesimulator/Runner.app
+          xcrun simctl launch '${{ steps.simulator.outputs.device }}' com.shiguang.smartBudget
+          xcrun simctl io '${{ steps.simulator.outputs.device }}' screenshot artifacts/iphone13.png
+      - name: Build unsigned ARM64 release app
+        run: |
+          python3 tool/prepare_voice_model.py --platform ios
+          flutter build ios --release --no-codesign --no-pub --target lib/main.dart
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app artifacts/ios-unsigned-app.zip
+      - name: Keep logs, screenshot and unsigned app for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shiguang-v3.0.1-ios-validation
+          path: |
+            artifacts/
+            ios/Podfile.lock
+            pubspec.lock
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Shut down simulator
+        if: always() && steps.simulator.outputs.device != ''
+        run: xcrun simctl shutdown '${{ steps.simulator.outputs.device }}' || true

@@ -4,6 +4,7 @@ Model by FunASR / Alibaba; ONNX export by sherpa-onnx / Fangjun Kuang.
 No upstream code is executed. Model weights are not stored in git.
 """
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import shutil
@@ -35,13 +36,18 @@ def digest(path):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--platform', choices=('android', 'ios'), default='android')
+    parser.add_argument('--include-smoke-audio', action='store_true')
+    args = parser.parse_args()
     model = download('model.int8.onnx')
     if model.stat().st_size != 227330205 or digest(model) != MODEL_SHA:
         raise RuntimeError('Paraformer model SHA256/size mismatch; do not publish')
     tokens = download('tokens.txt')
     if len(tokens.read_text().splitlines()) < 8000:
         raise RuntimeError('Incomplete Paraformer vocabulary')
-    output = Path('android/app/src/main/assets/voice')
+    output = Path('android/app/src/main/assets/voice' if args.platform == 'android'
+                  else 'ios/Runner/VoiceAssets')
     output.mkdir(parents=True, exist_ok=True)
     for file in (model, tokens): shutil.copyfile(file, output / file.name)
     metadata = {'name': 'Paraformer-zh INT8 (220M)', 'author': 'FunASR / Alibaba',
@@ -50,5 +56,10 @@ if __name__ == '__main__':
                 'sizes': {file.name: file.stat().st_size for file in (model, tokens)}}
     (output / 'model.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2))
     shutil.copyfile('assets/licenses/FunASR_MODEL_LICENSE.txt', output / 'MODEL_LICENSE.txt')
-    download('test_wavs/0.wav')
+    sample = download('test_wavs/0.wav')
+    if args.include_smoke_audio:
+        shutil.copyfile(sample, output / 'smoke.wav')
+    else:
+        (output / 'smoke.wav').unlink(missing_ok=True)
     print(f'Verified and packaged Paraformer-zh: {model.stat().st_size} bytes, SHA256 {MODEL_SHA}')
+

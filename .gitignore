@@ -5,6 +5,10 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 android/
+ios/
+pubspec.lock
+artifacts/
+__pycache__/
 *.jks
 *.keystore
 key.properties
@@ -13,3 +17,4 @@ key.properties
 
 
 .voice-model-cache/
+

@@ -42,6 +42,7 @@ Android 可以先导出 CSV，再在 iPhone 中导入。CSV 仅迁移账单字�
 GitHub Actions 的 `Validate iPhone 13 iOS port` 执行：
 项目配置检查、完整 Flutter 回归、iPhone 13 模拟器原生通道与真实离线模型推理、
 Swift 存储测试、模拟器应用构建和 ARM64 无签名 Release 构建。
+还会从最终 `.app` 重新校验模型 SHA256、麦克风说明和许可文件，并检查未混入测试音频。
 生成截图、原生测试结果及无签名 `.app` 压缩包，保留 14 天。
 
 模拟器集成测试需先准备测试音频：

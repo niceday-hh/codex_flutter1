@@ -72,12 +72,15 @@ jobs:
             -derivedDataPath build/ios-native-tests -resultBundlePath artifacts/native-tests.xcresult \
             CODE_SIGNING_ALLOWED=NO
           xcrun simctl install '${{ steps.simulator.outputs.device }}' build/ios/iphonesimulator/Runner.app
-          xcrun simctl launch '${{ steps.simulator.outputs.device }}' com.shiguang.smartBudget
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          xcrun simctl launch '${{ steps.simulator.outputs.device }}' "$BUNDLE_ID"
+          sleep 3
           xcrun simctl io '${{ steps.simulator.outputs.device }}' screenshot artifacts/iphone13.png
       - name: Build unsigned ARM64 release app
         run: |
           python3 tool/prepare_voice_model.py --platform ios
           flutter build ios --release --no-codesign --no-pub --target lib/main.dart
+          python3 tool/verify_ios_app.py build/ios/iphoneos/Runner.app
           ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app artifacts/ios-unsigned-app.zip
       - name: Keep logs, screenshot and unsigned app for review
         if: always()

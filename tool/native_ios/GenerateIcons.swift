@@ -58,7 +58,7 @@ for (size, scale, idiom) in specifications {
     bytesPerRow: pixels * 4, space: CGColorSpaceCreateDeviceRGB(),
     bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
   context.setFillColor(color(branding.background))
-  context.fill(CGRect(x: 0, y: 0, width: pixels, height: pixels))
+  context.fill(CGRect(x: 0, y: 0, width: CGFloat(pixels), height: CGFloat(pixels)))
   context.translateBy(x: 0, y: CGFloat(pixels))
   context.scaleBy(x: CGFloat(pixels) / 108, y: -CGFloat(pixels) / 108)
   for item in branding.paths {

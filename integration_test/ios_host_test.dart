@@ -32,8 +32,9 @@ void main() {
     expect(await File(files!['model']!).length(), 227330205);
     expect(await File(files['tokens']!).exists(), isTrue);
     // CI deliberately packages a fixed upstream sample; production builds omit it.
-    final sample = files['testAudio'];
-    expect(sample, isNotNull, reason: 'Prepare the CI model with --include-smoke-audio');
+    final sample = File(files['model']!).parent.uri.resolve('smoke.wav').toFilePath();
+    expect(await File(sample).exists(), isTrue,
+        reason: 'Prepare the CI model with --include-smoke-audio');
     sherpa.initBindings();
     final recognizer = sherpa.OfflineRecognizer(sherpa.OfflineRecognizerConfig(
       model: sherpa.OfflineModelConfig(
@@ -43,7 +44,7 @@ void main() {
     ));
     final stream = recognizer.createStream();
     try {
-      final wave = sherpa.readWave(sample!);
+      final wave = sherpa.readWave(sample);
       expect(wave.samples, isNotEmpty);
       stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
       recognizer.decode(stream);

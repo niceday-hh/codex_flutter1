@@ -86,13 +86,9 @@ final class SmartBudgetHost: NSObject, FlutterPlugin, UIDocumentPickerDelegate,
       where url.pathExtension == "wav" {
       try? FileManager.default.removeItem(at: url)
     }
-    var paths = ["model": folder.appendingPathComponent("model.int8.onnx").path,
+    let paths = ["model": folder.appendingPathComponent("model.int8.onnx").path,
                  "tokens": folder.appendingPathComponent("tokens.txt").path,
                  "recordDir": records.path]
-    #if DEBUG
-    let sample = folder.appendingPathComponent("smoke.wav")
-    if FileManager.default.fileExists(atPath: sample.path) { paths["testAudio"] = sample.path }
-    #endif
     // ONNX can read the immutable bundle directly; no second 227 MB copy is needed.
     return paths
   }

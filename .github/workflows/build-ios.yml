@@ -42,6 +42,7 @@ jobs:
           flutter config --no-enable-swift-package-manager
           bash tool/bootstrap_ios.sh
           python3 -m unittest discover -s tool/tests -v
+          bash tool/test_ios_storage.sh
       - name: Prepare the verified offline model and inference sample
         run: python3 tool/prepare_voice_model.py --platform ios --include-smoke-audio
       - name: Resolve packages, analyze and run Flutter regressions
@@ -59,17 +60,13 @@ jobs:
           echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "$DEVICE"
           xcrun simctl bootstatus "$DEVICE" -b
-      - name: Build the app UI and test native persistence
+      - name: Build and capture the app UI
         timeout-minutes: 12
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
           flutter build ios --simulator --debug --no-pub --target lib/main.dart
-          xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.device }}' \
-            -derivedDataPath build/ios-native-tests -resultBundlePath artifacts/native-tests.xcresult \
-            CODE_SIGNING_ALLOWED=NO
           xcrun simctl install '${{ steps.simulator.outputs.device }}' build/ios/iphonesimulator/Runner.app
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
           xcrun simctl launch '${{ steps.simulator.outputs.device }}' "$BUNDLE_ID"

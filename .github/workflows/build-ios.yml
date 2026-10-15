@@ -72,25 +72,39 @@ jobs:
           xcrun simctl launch '${{ steps.simulator.outputs.device }}' "$BUNDLE_ID"
           sleep 3
           xcrun simctl io '${{ steps.simulator.outputs.device }}' screenshot artifacts/iphone13.png
-      - name: Build unsigned ARM64 release app
+      - name: Build unsigned ARM64 release IPA for SideStore
         timeout-minutes: 12
         run: |
           python3 tool/prepare_voice_model.py --platform ios
           flutter build ios --release --no-codesign --no-pub --target lib/main.dart
           python3 tool/verify_ios_app.py build/ios/iphoneos/Runner.app
-          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app artifacts/ios-unsigned-app.zip
+          xcrun lipo -verify_arch arm64 build/ios/iphoneos/Runner.app/Runner
+          IPA_ROOT=$(mktemp -d "$RUNNER_TEMP/shiguang-ipa.XXXXXX")
+          mkdir -p "$IPA_ROOT/Payload" artifacts/ipa
+          ditto build/ios/iphoneos/Runner.app "$IPA_ROOT/Payload/Runner.app"
+          (cd "$IPA_ROOT" && zip -q -r -y "$GITHUB_WORKSPACE/artifacts/ipa/shiguang-3.0.1-unsigned.ipa" Payload)
+          python3 tool/verify_ios_ipa.py artifacts/ipa/shiguang-3.0.1-unsigned.ipa
+          (cd artifacts/ipa && shasum -a 256 shiguang-3.0.1-unsigned.ipa > SHA256SUMS)
       - name: Test real native channels and offline inference
         timeout-minutes: 8
         run: |
           python3 tool/prepare_voice_model.py --platform ios --include-smoke-audio
           flutter test integration_test/ios_host_test.dart -d '${{ steps.simulator.outputs.device }}' --timeout 300s
-      - name: Keep logs, screenshot and unsigned app for review
+      - name: Upload verified unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: shiguang-3.0.1-unsigned-ipa
+          path: artifacts/ipa/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - name: Keep validation screenshot and lockfiles for review
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: shiguang-v3.0.1-ios-validation
           path: |
-            artifacts/
+            artifacts/iphone13.png
             ios/Podfile.lock
             pubspec.lock
           if-no-files-found: warn

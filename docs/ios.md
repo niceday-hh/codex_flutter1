@@ -45,7 +45,12 @@ Swift 存储测试、模拟器应用构建和 ARM64 无签名 Release 构建。
 纯文件存储用 SwiftPM 直接运行生产代码与同一组 XCTest，避免依赖应用测试运行器；
 iOS 原生通道和真实模型推理另外在 iPhone 模拟器中验证。
 还会从最终 `.app` 重新校验模型 SHA256、麦克风说明和许可文件，并检查未混入测试音频。
-生成截图及无签名 `.app` 压缩包，保留 14 天，测试结果记录在 Actions 日志中。
+无签名真机 Release 构建后，将应用放入 `Payload/Runner.app` 并打包为 IPA。
+检查最终 IPA 的目录结构、真机平台、可执行权限、Flutter 框架、完整模型 SHA256 及 ZIP CRC，
+不包含测试音频或任何设备的签名描述文件；另附 `SHA256SUMS`。
+全部检查通过后上传 `shiguang-3.0.1-unsigned-ipa` 产物，保留 90 天。
+截图和依赖锁文件位于 `shiguang-v3.0.1-ios-validation` 产物中，保留 14 天。
+测试结果记录在 Actions 日志中。
 
 模拟器集成测试需先准备测试音频：
 
@@ -56,8 +61,25 @@ flutter test integration_test/ios_host_test.dart -d <模拟器ID> --timeout 300s
 
 发布前重新执行不带 `--include-smoke-audio` 的模型准备命令。
 测试音频不进入正式构建，正式模型与 Android 3.0.1 相同。
-无签名 `.app` 不能直接安装到普通 iPhone；真机安装、归档或 TestFlight 需开发者账号签名。
+未签名 IPA 不能直接安装到普通 iPhone，需要通过 SideStore 等工具签名后安装。
 本流程不会自动提交 App Store 或发布新版本。
+
+## 免费账号通过 SideStore 安装
+
+1. 打开本分支最新一次成功的 iOS Actions 构建，在 Artifacts 中下载
+   `shiguang-3.0.1-unsigned-ipa`，解压得到 `shiguang-3.0.1-unsigned.ipa` 和 `SHA256SUMS`。
+   导入 SideStore 的是 `.ipa`，不是 GitHub 下载的外层 `.zip`。
+2. 按 [SideStore 官方安装说明](https://docs.sidestore.io/docs/installation/install)，
+   首次用电脑和 USB 连接手机完成 SideStore、配对和开发者模式设置。
+3. 把 IPA 保存到 iPhone 的“文件”中；连接 Wi-Fi 和 LocalDevVPN，在 SideStore 的
+   `My Apps` 页面点击 `+`，选择 IPA，使用自己的免费 Apple 账号签名安装。
+4. 在到期前通过 SideStore 刷新自身和拾光账本；免费描述文件有效期约 7 天。
+   后续通常可以直接在手机上操作；系统升级、配对失效或签名工具故障可能需要电脑恢复。
+
+构建阶段无需提供 UDID、Apple 账号、签名证书或 GitHub Secrets，也无需付费开发者会员。
+续签或更新保持同一 Apple 账号和应用标识，采用覆盖安装以保留本地账本，避免先卸载应用。
+IPA 是 ARM64 真机 Release 构建，最低 iOS 15；iOS 26.x 的签名工具兼容性和实际运行需真机确认。
+本产物优先用于 SideStore 独立安装；LiveContainer 内运行尚未验收。
 
 ## 真机验收
 

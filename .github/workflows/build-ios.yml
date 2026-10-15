@@ -59,9 +59,8 @@ jobs:
           echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "$DEVICE"
           xcrun simctl bootstatus "$DEVICE" -b
-      - name: Test real native channels and offline inference
-        run: flutter test integration_test/ios_host_test.dart -d '${{ steps.simulator.outputs.device }}' --timeout 300s
       - name: Build the app UI and test native persistence
+        timeout-minutes: 12
         shell: bash
         run: |
           set -euo pipefail
@@ -77,11 +76,17 @@ jobs:
           sleep 3
           xcrun simctl io '${{ steps.simulator.outputs.device }}' screenshot artifacts/iphone13.png
       - name: Build unsigned ARM64 release app
+        timeout-minutes: 12
         run: |
           python3 tool/prepare_voice_model.py --platform ios
           flutter build ios --release --no-codesign --no-pub --target lib/main.dart
           python3 tool/verify_ios_app.py build/ios/iphoneos/Runner.app
           ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app artifacts/ios-unsigned-app.zip
+      - name: Test real native channels and offline inference
+        timeout-minutes: 8
+        run: |
+          python3 tool/prepare_voice_model.py --platform ios --include-smoke-audio
+          flutter test integration_test/ios_host_test.dart -d '${{ steps.simulator.outputs.device }}' --timeout 300s
       - name: Keep logs, screenshot and unsigned app for review
         if: always()
         uses: actions/upload-artifact@v4

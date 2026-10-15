@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -35,23 +36,36 @@ void main() {
     final sample = File(files['model']!).parent.uri.resolve('smoke.wav').toFilePath();
     expect(await File(sample).exists(), isTrue,
         reason: 'Prepare the CI model with --include-smoke-audio');
+    final model = files['model']!;
+    final tokens = files['tokens']!;
+    // Match the app's background inference: keep Flutter's test channel responsive.
+    final text = await Isolate.run(() => recognize(model, tokens, sample))
+        .timeout(const Duration(minutes: 2));
+    expect(text.trim(), isNotEmpty);
+  }, timeout: const Timeout(Duration(minutes: 3)));
+}
+
+String recognize(String model, String tokens, String sample) {
+    print('iOS offline ASR: initializing model');
     sherpa.initBindings();
     final recognizer = sherpa.OfflineRecognizer(sherpa.OfflineRecognizerConfig(
       model: sherpa.OfflineModelConfig(
-        paraformer: sherpa.OfflineParaformerModelConfig(model: files['model']!),
-        tokens: files['tokens']!, modelType: 'paraformer', numThreads: 2,
+        paraformer: sherpa.OfflineParaformerModelConfig(model: model),
+        tokens: tokens, modelType: 'paraformer', numThreads: 2,
       ),
     ));
     final stream = recognizer.createStream();
     try {
       final wave = sherpa.readWave(sample);
-      expect(wave.samples, isNotEmpty);
+      if (wave.samples.isEmpty) throw StateError('Empty inference sample');
       stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
+      print('iOS offline ASR: decoding sample');
       recognizer.decode(stream);
-      expect(recognizer.getResult(stream).text.trim(), isNotEmpty);
+      final text = recognizer.getResult(stream).text;
+      print('iOS offline ASR: inference completed');
+      return text;
     } finally {
       stream.free();
       recognizer.free();
     }
-  }, timeout: const Timeout(Duration(minutes: 3)));
 }

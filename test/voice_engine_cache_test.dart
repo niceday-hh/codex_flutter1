@@ -6,7 +6,6 @@ import 'voice_session_test.dart' show FakeVoiceEngine;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  group('on-demand voice cache', () {
   test('manual-only cache construction and eviction never construct an engine', () async {
     var created = 0;
     final cache = VoiceEngineCache(factory: () { created++; return FakeVoiceEngine(); });
@@ -54,5 +53,4 @@ void main() {
     final second = cache.acquire(); await second.prepare(); expect(engines.length, 2);
     await second.close(); await cache.dispose();
   });
-  }, timeout: const Timeout(Duration(seconds: 15)));
 }

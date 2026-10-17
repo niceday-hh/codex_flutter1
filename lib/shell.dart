@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'app_store.dart';
+import 'voice/voice_engine_cache.dart';
 import 'voice/voice_sheet.dart';
 import 'widgets/active_store_scope.dart';
 import 'package:flutter/cupertino.dart';
@@ -22,6 +24,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   final Set<int> _visited = {0};
   bool _adding = false;
+  VoiceEngineCache? _voiceCache;
   final _addButtonKey = GlobalKey();
 
   static const _pages = <Widget>[
@@ -43,6 +46,7 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openAdd() async {
     if (_adding) return;
     _adding = true;
+    unawaited(_voiceCache?.releaseIdle());
     HapticFeedback.lightImpact();
     try {
       await Navigator.of(context).push(
@@ -75,12 +79,19 @@ class _AppShellState extends State<AppShell> {
     if (selected != 'voice' || !mounted || _adding) return;
     _adding = true;
     try {
-      final saved = await showVoiceEntry(context, AppStoreScope.read(context));
+      final engine = (_voiceCache ??= VoiceEngineCache()).acquire();
+      final saved = await showVoiceEntry(context, AppStoreScope.read(context), engine: engine);
       if (saved == true && mounted) {
         _goTo(0);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已记下这笔账')));
       }
     } finally { _adding = false; }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_voiceCache?.dispose());
+    super.dispose();
   }
 
   @override

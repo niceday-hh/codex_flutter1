@@ -34,10 +34,21 @@ class ParaformerVoiceEngine implements VoiceEngine {
   Stream<double> get levels => _levels.stream;
 
   @override
-  Future<void> prepare() => _preparing ??= _prepare();
+  Future<void> prepare() {
+    if (_closed) return Future.error(StateError('语音引擎已关闭'));
+    return _preparing ??= _prepareWithRecovery();
+  }
+  Future<void> _prepareWithRecovery() async {
+    try { await _prepare().timeout(const Duration(seconds: 45)); }
+    catch (_) {
+      await _closeWorker();
+      _preparing = null;
+      rethrow;
+    }
+  }
   Future<void> _prepare() async {
     final files = await _channel.invokeMapMethod<String, String>('prepare');
-    if (_closed) return;
+    if (_closed) throw StateError('语音已关闭');
     if (files == null) throw StateError('语音模型不可用，请重新安装完整版本');
     _cacheDir = files['recordDir'];
     final ready = Completer<void>();
@@ -66,7 +77,10 @@ class ParaformerVoiceEngine implements VoiceEngine {
     final result = Completer<String>();
     _pending[id] = result;
     _commands!.send([action, id, path]);
-    return result.future;
+    return result.future.timeout(const Duration(seconds: 45), onTimeout: () {
+      _pending.remove(id);
+      throw StateError('语音识别超时，请重新打开语音输入');
+    });
   }
 
   @override
@@ -103,8 +117,12 @@ class ParaformerVoiceEngine implements VoiceEngine {
   }
   Future<void> _closeWorker() async {
     if (_commands != null) {
-      try { await _request('close', ''); } catch (_) {}
+      try { await _request('close', '').timeout(const Duration(seconds: 3)); } catch (_) {}
     }
+    for (final pending in _pending.values) {
+      if (!pending.isCompleted) pending.completeError(StateError('语音输入已关闭'));
+    }
+    _pending.clear();
     _responses?.close(); _responses = null;
     _worker?.kill(); _worker = null; _commands = null;
   }

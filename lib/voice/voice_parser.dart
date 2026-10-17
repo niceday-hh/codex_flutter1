@@ -1,15 +1,31 @@
-// Local, deterministic Mandarin bookkeeping rules. No network or language model.
+import '../notes/note_catalog.dart';
+import 'voice_category.dart';
+
+// Local, deterministic Mandarin bookkeeping rules with personal note history.
 class VoiceDraft {
   const VoiceDraft({required this.rawText, required this.amount, required this.isIncome,
-    required this.category, required this.note, required this.date, this.warnings = const []});
+    required this.category, required this.note, required this.date, this.warnings = const [],
+    this.categoryReason = '', this.categorySuggestions = const []});
   final String rawText, category, note;
   final double? amount;
   final bool isIncome;
   final DateTime date;
   final List<String> warnings;
-  VoiceDraft copyWith({double? amount, bool? isIncome, String? category, String? note, DateTime? date}) =>
-    VoiceDraft(rawText: rawText, amount: amount ?? this.amount, isIncome: isIncome ?? this.isIncome,
-      category: category ?? this.category, note: note ?? this.note, date: date ?? this.date, warnings: warnings);
+  final String categoryReason;
+  final List<VoiceCategorySuggestion> categorySuggestions;
+  VoiceDraft copyWith({double? amount, bool? isIncome, String? category, String? note, DateTime? date}) {
+    final updatedWarnings = warnings.where((w) =>
+      !(amount != null && (w.contains('金额') || w.contains('总额'))) &&
+      !(category != null && (w.contains('分类') || w.contains('用途'))) &&
+      !(date != null && w.contains('日期'))).toList();
+    if (amount != null && (amount <= 0 || amount > 999999999)) updatedWarnings.add('金额需大于零且不超过九位数字');
+    if (category == '其他') updatedWarnings.add('用途不明确，请选择分类');
+    return VoiceDraft(rawText: rawText, amount: amount ?? this.amount, isIncome: isIncome ?? this.isIncome,
+      category: category ?? this.category, note: note ?? this.note, date: date ?? this.date,
+      warnings: List.unmodifiable(updatedWarnings),
+      categoryReason: category == null ? categoryReason : '',
+      categorySuggestions: category == null ? categorySuggestions : const []);
+  }
 }
 
 class _Money {
@@ -20,14 +36,21 @@ class _Money {
 
 const _number = r'[0-9零〇一二两三四五六七八九十百千万亿]+(?:[.点][0-9零〇一二两三四五六七八九]+)?';
 
-VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
+VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
+    bool? incomeOverride, String? noteOverride}) {
   final today = now ?? DateTime.now();
   var text = raw.replaceAllMapped(RegExp(r'[０-９]'), (m) => String.fromCharCode(m[0]!.codeUnitAt(0) - 0xfee0))
       .replaceAll('．', '.').replaceAll('，', ',').replaceAll('。', ' ').replaceAll(RegExp(r'(?<=\d),(?=\d{3}(?:\D|$))'), '');
   final warnings = <String>[];
   final noteMarker = RegExp(r'(?:备注(?:为|是|叫|写)?|记作|标注(?:为|是)?)\s*[:：]?\s*').firstMatch(text);
-  final explicitNote = noteMarker == null ? null : text.substring(noteMarker.end).trim();
+  final noteTail = noteMarker == null ? null : text.substring(noteMarker.end).trim();
+  // Allow “备注牛肉面，花了28元”, while keeping quantities inside a
+  // remark (“备注买了2杯咖啡”) out of amount extraction.
+  final trailingTransaction = noteTail == null ? null : RegExp(
+    '[,;；]\\s*(?=(?:(?:花了?|支付了?|付了?|支出|收入|金额|价格|一共|总共|实付)\\s*$_number|$_number(?:元|块)))').firstMatch(noteTail);
+  final explicitNote = noteOverride ?? (trailingTransaction == null ? noteTail : noteTail!.substring(0, trailingTransaction.start).trim());
   var body = noteMarker == null ? text : text.substring(0, noteMarker.start);
+  if (trailingTransaction != null) body += ' ${noteTail!.substring(trailingTransaction.end)}';
   var date = today;
   final absoluteDate = RegExp(r'(?:([0-9]{4})年)?([0-9]{1,2})月([0-9]{1,2})[日号]').firstMatch(body);
   if (absoluteDate != null) {
@@ -56,8 +79,8 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
   final explicitIncome = RegExp(r'收入|进账|到账|收到|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody);
   final implicitIncome = RegExp(r'薪水|工资|奖金|利息|分红').hasMatch(typeBody)
     && !RegExp(r'买|购买|花|支付|付给|转给|还没|没发|没有').hasMatch(body);
-  final income = !body.contains('支出') && (explicitIncome || implicitIncome)
-    && !RegExp(r'(?:转给|给别人|还给|付给|借给)').hasMatch(typeBody);
+  final income = incomeOverride ?? (!body.contains('支出') && (explicitIncome || implicitIncome)
+    && !RegExp(r'(?:转给|给别人|还给|付给|借给)').hasMatch(typeBody));
   final candidates = <_Money>[];
   void add(RegExp pattern, double Function(RegExpMatch) value) {
     for (final m in pattern.allMatches(body)) {
@@ -102,7 +125,28 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
   final amount = selected == null ? null : (selected.value * 100).round() / 100;
   if (amount == null && candidates.isEmpty) warnings.add('未识别到金额，请补充');
   if (amount != null && (amount <= 0 || amount > 999999999)) warnings.add('金额需大于零且不超过九位数字');
-  final category = _category(body, income);
+  final categoryText = '$body ${explicitNote ?? ''}';
+  final history = matchVoiceNotes(categoryText, income, catalog, today);
+  final explicitCategory = _explicitCategory(body, income);
+  final specific = _specificCategory(history.removeFrom(categoryText), income);
+  final String category;
+  var categoryReason = '';
+  if (explicitCategory != null) {
+    category = explicitCategory;
+    categoryReason = '采用你明确指定的分类';
+  } else if (specific != null) {
+    category = specific;
+    categoryReason = '根据本次用途推荐';
+  } else if (history.suggestions.isNotEmpty && history.certain) {
+    category = history.suggestions.first.category;
+    categoryReason = '根据历史备注「${history.suggestions.first.note}」推荐';
+  } else if (history.suggestions.isNotEmpty) {
+    category = '其他';
+    categoryReason = '历史备注有多个分类，请选择';
+    warnings.add('历史备注分类存在歧义，请核对分类');
+  } else {
+    category = _category(categoryText, income);
+  }
   if (category == '其他') warnings.add('用途不明确，请选择分类');
   var note = explicitNote;
   if (note == null || note.isEmpty) {
@@ -116,7 +160,8 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now}) {
   }
   if (note.isEmpty) note = category;
   return VoiceDraft(rawText: raw.trim(), amount: amount, isIncome: income, category: category,
-    note: note, date: date, warnings: List.unmodifiable(warnings));
+    note: note, date: date, warnings: List.unmodifiable(warnings), categoryReason: categoryReason,
+    categorySuggestions: history.suggestions);
 }
 
 const _digits = {'零':0,'〇':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
@@ -146,15 +191,23 @@ double mandarinNumber(String source) {
 }
 
 String _category(String text, bool income) {
+  return _explicitCategory(text, income) ?? _specificCategory(text, income) ??
+    (income ? '其他' : (RegExp(r'吃|喝').hasMatch(text) ? '餐饮' : RegExp(r'买|购买|购物').hasMatch(text) ? '购物' : '其他'));
+}
+
+String? _explicitCategory(String text, bool income) {
   final names = income ? const ['工资','兼职','理财','礼金','奖金','报销','退款','其他'] : const [
     '餐饮','购物','日用','交通','蔬菜','水果','零食','运动','娱乐','通讯','服饰','美容','住房','居家','孩子','长辈','社交','旅行','烟酒','数码','汽车','医疗','书籍','学习','宠物','礼金','礼物','办公','维修','捐赠','彩票','亲友','快递','其他'];
   final explicit = RegExp('分类(?:为|是)?\\s*(${names.join('|')})').firstMatch(text);
-  if (explicit != null) return explicit[1]!;
+  return explicit?[1];
+}
+
+String? _specificCategory(String text, bool income) {
   final rules = income ? _incomeRules : _expenseRules;
   for (final rule in rules.entries) {
     if (rule.value.any(text.contains)) return rule.key;
   }
-  return income ? '其他' : (RegExp(r'吃|喝').hasMatch(text) ? '餐饮' : RegExp(r'买|购买|购物').hasMatch(text) ? '购物' : '其他');
+  return null;
 }
 const _incomeRules = {
   '退款':['退款','退回','退了','退货'], '报销':['报销'], '奖金':['奖金','年终奖','奖励'],

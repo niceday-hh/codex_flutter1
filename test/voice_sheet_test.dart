@@ -61,4 +61,32 @@ void main() {
     expect(find.text('记一笔'),findsOneWidget);expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
+  testWidgets('correct original text uses personal notes and opens the complete note picker without saving', (tester) async {
+    final engine=FakeVoiceEngine(text:'盒码58元');final store=await build(tester,engine);
+    store.addEntry(title:'盒马',category:'餐饮',amount:20,isIncome:false,date:DateTime(2026,1,1),note:'盒马');
+    final before=store.entries.length;await record(tester);
+    await tester.tap(find.byKey(const ValueKey('voice-edit-original')));await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField),'盒马58元');await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();await tester.pump(const Duration(milliseconds:300));
+    expect(find.text('根据历史备注「盒马」推荐'),findsOneWidget);expect(store.entries.length,before);
+    await tester.ensureVisible(find.text('备注'));await tester.tap(find.text('备注'));await tester.pumpAndSettle();
+    expect(find.text('选个备注'),findsOneWidget);expect(find.text('全部'),findsOneWidget);
+    await tester.tap(find.text('使用此备注'));await tester.pumpAndSettle();expect(store.entries.length,before);
+    await tester.tap(find.byTooltip('关闭语音输入'));await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());store.dispose();
+  });
+  testWidgets('correcting amount clears stale warning and survives reparsing', (tester) async {
+    final engine=FakeVoiceEngine(text:'午饭');final store=await build(tester,engine);await record(tester);
+    expect(find.text('未识别到金额，请补充'),findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('voice-confirm')));await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField),'28');await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();await tester.pump(const Duration(milliseconds:300));
+    expect(find.text('未识别到金额，请补充'),findsNothing);
+    await tester.tap(find.byKey(const ValueKey('voice-edit-original')));await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField),'午饭99元');await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();await tester.pump(const Duration(milliseconds:300));
+    expect(find.text('¥ 28.00'),findsOneWidget);expect(find.text('¥ 99.00'),findsNothing);
+    await tester.tap(find.byTooltip('关闭语音输入'));await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());store.dispose();
+  });
 }

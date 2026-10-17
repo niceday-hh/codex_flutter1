@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_store.dart';
 import '../app_theme.dart';
+import '../widgets/note_picker.dart';
 import 'voice_engine.dart';
 import 'voice_parser.dart';
 import 'voice_session.dart';
@@ -29,7 +30,7 @@ class VoiceEntrySheet extends StatefulWidget {
   State<VoiceEntrySheet> createState() => _VoiceEntrySheetState();
 }
 class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingObserver {
-  late final _session = VoiceSession(widget.engine);
+  late final _session = VoiceSession(widget.engine, loadNotes: widget.store.loadNoteCatalog);
   bool _saved = false;
   @override
   void initState() {
@@ -46,17 +47,18 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this); _session.dispose(); super.dispose();
   }
-  Future<void> _editText(String title, String value, void Function(String) apply, {bool money = false}) async {
+  Future<void> _editText(String title, String value, FutureOr<void> Function(String) apply, {bool money = false}) async {
     final controller = TextEditingController(text: value);
     final result = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
-      title: Text(title), content: TextField(controller: controller, autofocus: true, maxLength: money ? 12 : 120,
+      title: Text(title), content: TextField(controller: controller, autofocus: true, maxLength: money ? 12 : 500,
+        minLines: 1, maxLines: money ? 1 : 4,
         keyboardType: money ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
         inputFormatters: money ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))] : null,
         decoration: const InputDecoration(hintText: '请输入')),
       actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
         TextButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('确定'))]));
     // A closing dialog may still paint the TextField for one transition frame.
-    if (result != null && mounted) apply(result);
+    if (result != null && mounted) await apply(result);
     await Future<void>.delayed(const Duration(milliseconds: 250)); controller.dispose();
   }
   Future<void> _editAmount() async {
@@ -66,7 +68,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
       if (amount == null || amount <= 0 || amount > 999999999 || !RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(text)) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入大于零、最多两位小数的金额'))); return;
       }
-      _session.edit(draft.copyWith(amount: amount));
+      _session.edit(draft.copyWith(amount: amount), fields: {VoiceField.amount});
     }, money: true);
   }
   Future<void> _editType() async {
@@ -75,7 +77,9 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
       children: [ListTile(title: const Text('支出'), leading: const Icon(Icons.remove_circle_outline), onTap: () => Navigator.pop(c, false)),
         ListTile(title: const Text('收入'), leading: const Icon(Icons.add_circle_outline), onTap: () => Navigator.pop(c, true))])));
     if (income != null && mounted) {
-      _session.edit(draft.copyWith(isIncome: income, category: '其他'));
+      _session.editedFields.remove(VoiceField.category);
+      _session.edit(draft.copyWith(isIncome: income, category: '其他'), fields: {VoiceField.type});
+      await _session.reparseText(draft.rawText);
     }
   }
   Future<void> _editCategory() async {
@@ -103,10 +107,24 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
         ]),
       )),
     );
-    if (selected != null && mounted) _session.edit(draft.copyWith(category: selected));
+    if (selected != null && mounted) _session.edit(draft.copyWith(category: selected), fields: {VoiceField.category});
+  }
+  Future<void> _editNote() async {
+    final draft = _session.draft!;
+    final selected = await showNotePicker(context, income: draft.isIncome,
+      category: draft.category, initial: draft.note, loadCatalog: widget.store.loadNoteCatalog);
+    if (selected == null || !mounted) return;
+    _session.edit(draft.copyWith(note: selected), fields: {VoiceField.note});
+    await _session.reparseText(draft.rawText);
+  }
+  Future<void> _editOriginal() async {
+    await _editText('修改原文并重新拆分', _session.draft!.rawText, (text) async {
+      if (text.trim().isEmpty) return;
+      await _session.reparseText(text);
+    });
   }
   Future<void> _save() async {
-    if (_saved || _session.stage != VoiceStage.review) return;
+    if (_saved || _session.stage != VoiceStage.review || _session.reparsing) return;
     final d = _session.draft!;
     if (d.amount == null || d.amount! <= 0 || d.amount! > 999999999) {
       await _editAmount(); return;
@@ -155,7 +173,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
         if (review) Padding(padding: const EdgeInsets.only(top: 16), child: Row(children: [
           Expanded(child: OutlinedButton.icon(key: const ValueKey('voice-rerecord'), onPressed: _session.rerecord,
             icon: const Icon(Icons.mic_none_rounded), label: const Text('再次录音'), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 54)))),
-          const SizedBox(width: 12), Expanded(child: FilledButton.icon(key: const ValueKey('voice-confirm'), onPressed: _save,
+          const SizedBox(width: 12), Expanded(child: FilledButton.icon(key: const ValueKey('voice-confirm'), onPressed: _session.reparsing ? null : _save,
             icon: const Icon(Icons.check_rounded), label: Text(draft?.amount == null ? '补充金额' : '确认记账'), style: FilledButton.styleFrom(minimumSize: const Size(0, 54))))]))
         else Semantics(button: true, label: '按住说话，松开识别', onTap: busy ? null : () async {
           // Accessible alternative to holding for screen-reader users.
@@ -177,7 +195,14 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
     final theme = Theme.of(context);
     return Column(children: [
       Container(width: double.infinity, padding: const EdgeInsets.all(14), decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(18)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('识别原文', style: theme.textTheme.bodySmall), const SizedBox(height: 7), Text(draft.rawText)])),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Expanded(child: Text('识别原文', style: theme.textTheme.bodySmall)),
+            TextButton.icon(key: const ValueKey('voice-edit-original'), onPressed: _session.reparsing ? null : _editOriginal,
+              icon: const Icon(Icons.edit_outlined, size: 15), label: Text(_session.reparsing ? '正在拆分' : '修改并拆分'))]),
+          Text(draft.rawText),
+          if (_session.editedFields.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6),
+            child: Text('重新拆分会保留你手动修改的字段', style: theme.textTheme.bodySmall)),
+        ])),
       const SizedBox(height: 12),
       Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(20)), child: Column(children: [
         InkWell(key: const ValueKey('voice-amount'), onTap: _editAmount, borderRadius: BorderRadius.circular(12), child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Row(children: [
@@ -187,13 +212,19 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
           const Icon(Icons.edit_outlined, size: 17)]))),
         _field('类型', draft.isIncome ? '收入' : '支出', Icons.account_balance_wallet_outlined, _editType),
         _field('分类', draft.category, Icons.category_outlined, _editCategory),
-        _field('备注', draft.note, Icons.notes_rounded, () => _editText('修改备注', draft.note, (value) => _session.edit(draft.copyWith(note: value)))),
+        _field('备注', draft.note, Icons.notes_rounded, _editNote),
         _field('日期', '${draft.date.year}/${draft.date.month}/${draft.date.day}', Icons.calendar_today_outlined, () async {
           final date = await showDatePicker(context: context, initialDate: draft.date,
             firstDate: DateTime(2000), lastDate: DateTime(2100));
-          if (date != null && mounted) _session.edit(draft.copyWith(date: DateTime(date.year,date.month,date.day,draft.date.hour,draft.date.minute)));
+          if (date != null && mounted) _session.edit(draft.copyWith(date: DateTime(date.year,date.month,date.day,draft.date.hour,draft.date.minute)), fields: {VoiceField.date});
         }),
       ])),
+      if (draft.categoryReason.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 10),
+        child: Align(alignment: Alignment.centerLeft, child: Text(draft.categoryReason, style: theme.textTheme.bodySmall))),
+      if (draft.categorySuggestions.isNotEmpty) Align(alignment: Alignment.centerLeft, child: Wrap(spacing: 8,
+        children: [for (final suggestion in draft.categorySuggestions) ActionChip(
+          label: Text('${emojiForCategory(suggestion.category)} ${suggestion.category}'),
+          onPressed: () => _session.edit(draft.copyWith(category: suggestion.category), fields: {VoiceField.category}))])),
       const SizedBox(height: 10), Text('点击字段可修改', style: theme.textTheme.bodySmall),
       for (final warning in draft.warnings) Padding(padding: const EdgeInsets.only(top: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Icon(Icons.info_outline, size: 16, color: AppPalette.primaryDeep), const SizedBox(width: 6),

@@ -7,6 +7,13 @@ class NoteChoice {
   DateTime latest;
   int count = 0;
   final Set<String> categories = {};
+  final Map<String, NoteCategoryUsage> categoryUsage = {};
+}
+
+class NoteCategoryUsage {
+  NoteCategoryUsage(this.latest);
+  DateTime latest;
+  int count = 0;
 }
 
 List<NoteChoice> collectNotes(List<LedgerEntry> entries, bool income) {
@@ -17,6 +24,9 @@ List<NoteChoice> collectNotes(List<LedgerEntry> entries, bool income) {
     final note = notes.putIfAbsent(text, () => NoteChoice(text, entry.date));
     note.count++;
     note.categories.add(entry.category);
+    final usage = note.categoryUsage.putIfAbsent(entry.category, () => NoteCategoryUsage(entry.date));
+    usage.count++;
+    if (entry.date.isAfter(usage.latest)) usage.latest = entry.date;
     if (entry.date.isAfter(note.latest)) note.latest = entry.date;
   }
   return notes.values.toList();

@@ -1,14 +1,20 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../notes/note_catalog.dart';
 import 'voice_engine.dart';
 import 'voice_parser.dart';
 
 enum VoiceStage { preparing, ready, starting, recording, recognizing, review, error }
+enum VoiceField { amount, type, category, note, date }
 
 class VoiceSession extends ChangeNotifier {
-  VoiceSession(this.engine, {DateTime Function()? clock}) : clock = clock ?? DateTime.now;
+  VoiceSession(this.engine, {DateTime Function()? clock, this.loadNotes}) : clock = clock ?? DateTime.now;
   final VoiceEngine engine;
   final DateTime Function() clock;
+  final Future<NoteCatalog> Function()? loadNotes;
+  final Set<VoiceField> editedFields = {};
+  int _parseGeneration = 0;
+  bool reparsing = false;
   VoiceStage stage = VoiceStage.preparing;
   VoiceDraft? draft;
   String? error;
@@ -42,7 +48,8 @@ class VoiceSession extends ChangeNotifier {
   }
   Future<void> _start() async {
     final generation = ++_generation;
-    stage = VoiceStage.starting; error = null; draft = null; seconds = 0; _publish();
+    stage = VoiceStage.starting; error = null; draft = null; seconds = 0;
+    editedFields.clear(); _parseGeneration++; _publish();
     try {
       final permitted = await engine.start();
       if (_closed || generation != _generation || !_held) {
@@ -75,7 +82,9 @@ class VoiceSession extends ChangeNotifier {
       final text = await engine.stop();
       if (_closed || generation != _generation) return;
       if (text == null || text.trim().isEmpty) throw StateError('未听清，请重新录音');
-      draft = parseVoiceEntry(text, now: clock()); stage = VoiceStage.review;
+      final notes = await _notes();
+      if (_closed || generation != _generation) return;
+      draft = parseVoiceEntry(text, now: clock(), catalog: notes); stage = VoiceStage.review;
     } catch (failure) {
       if (_closed || generation != _generation) return;
       error = '$failure'.replaceFirst('Bad state: ', ''); stage = VoiceStage.error;
@@ -90,12 +99,36 @@ class VoiceSession extends ChangeNotifier {
   }
   void rerecord() {
     if (stage != VoiceStage.review) return;
-    draft = null; error = null; stage = VoiceStage.ready; _publish();
+    draft = null; error = null; editedFields.clear(); _parseGeneration++; reparsing = false;
+    stage = VoiceStage.ready; _publish();
   }
-  void edit(VoiceDraft value) { draft = value; _publish(); }
+  Future<NoteCatalog?> _notes() async {
+    final loader = loadNotes;
+    if (loader == null) return null;
+    try { return await loader().timeout(const Duration(seconds: 5)); }
+    catch (_) { return null; } // History is optional; recognition must remain usable.
+  }
+  void edit(VoiceDraft value, {required Set<VoiceField> fields}) {
+    editedFields.addAll(fields); draft = value; _publish();
+  }
+  Future<void> reparseText(String text) async {
+    if (_closed || stage != VoiceStage.review || text.trim().isEmpty) return;
+    final generation = ++_parseGeneration;
+    reparsing = true; _publish();
+    final notes = await _notes();
+    if (_closed || generation != _parseGeneration || stage != VoiceStage.review) return;
+    final previous = draft!;
+    var parsed = parseVoiceEntry(text, now: clock(), catalog: notes,
+      incomeOverride: editedFields.contains(VoiceField.type) ? previous.isIncome : null,
+      noteOverride: editedFields.contains(VoiceField.note) ? previous.note : null);
+    if (editedFields.contains(VoiceField.amount) && previous.amount != null) parsed = parsed.copyWith(amount: previous.amount);
+    if (editedFields.contains(VoiceField.category)) parsed = parsed.copyWith(category: previous.category);
+    if (editedFields.contains(VoiceField.date)) parsed = parsed.copyWith(date: previous.date);
+    draft = parsed; reparsing = false; _publish();
+  }
   Future<void> shutdown() async {
     if (_closed) return;
-    _closed = true; _held = false; _generation++;
+    _closed = true; _held = false; _generation++; _parseGeneration++;
     _timer?.cancel(); await _levels?.cancel();
     await _startTask;
     await engine.close();

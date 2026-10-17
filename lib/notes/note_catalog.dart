@@ -37,6 +37,7 @@ class NoteCatalog {
   NoteCatalog(List<LedgerEntry> entries)
       : expense = List.unmodifiable(collectNotes(entries, false)),
         income = List.unmodifiable(collectNotes(entries, true));
+  NoteCatalog.fromChoices({required this.expense, required this.income});
   final List<NoteChoice> expense, income;
   final _prepared = <(bool, String), Future<PreparedNotes>>{};
   Future<PreparedNotes> prepare(bool isIncome, String category) =>

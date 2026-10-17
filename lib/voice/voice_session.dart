@@ -36,7 +36,7 @@ class VoiceSession extends ChangeNotifier {
       _levels ??= engine.levels.listen((value) { level = value; _publish(); });
     } catch (_) {
       if (_closed) return;
-      stage = VoiceStage.error; error = '离线语音模型准备失败，请关闭后重试或重新安装完整版本';
+      stage = VoiceStage.error; error = '离线语音准备失败，请按住说话重试；仍失败可重新打开语音输入';
     }
     _publish();
   }
@@ -84,7 +84,9 @@ class VoiceSession extends ChangeNotifier {
       if (text == null || text.trim().isEmpty) throw StateError('未听清，请重新录音');
       final notes = await _notes();
       if (_closed || generation != _generation) return;
-      draft = parseVoiceEntry(text, now: clock(), catalog: notes); stage = VoiceStage.review;
+      final parsed = await _parse(text, notes);
+      if (_closed || generation != _generation) return;
+      draft = parsed; stage = VoiceStage.review;
     } catch (failure) {
       if (_closed || generation != _generation) return;
       error = '$failure'.replaceFirst('Bad state: ', ''); stage = VoiceStage.error;
@@ -108,6 +110,14 @@ class VoiceSession extends ChangeNotifier {
     try { return await loader().timeout(const Duration(seconds: 5)); }
     catch (_) { return null; } // History is optional; recognition must remain usable.
   }
+  Future<VoiceDraft> _parse(String text, NoteCatalog? notes, {bool? incomeOverride, String? noteOverride}) {
+    final input = (text: text, now: clock(), expense: notes?.expense ?? <NoteChoice>[],
+      income: notes?.income ?? <NoteChoice>[], incomeOverride: incomeOverride, noteOverride: noteOverride);
+    // Pass only plain note statistics, never NoteCatalog's cached Futures.
+    return input.expense.length + input.income.length >= 200
+      ? compute(_parseVoiceDraft, input, debugLabel: 'parse-personal-voice-draft')
+      : Future.value(_parseVoiceDraft(input));
+  }
   void edit(VoiceDraft value, {required Set<VoiceField> fields}) {
     editedFields.addAll(fields); draft = value; _publish();
   }
@@ -118,12 +128,14 @@ class VoiceSession extends ChangeNotifier {
     final notes = await _notes();
     if (_closed || generation != _parseGeneration || stage != VoiceStage.review) return;
     final previous = draft!;
-    var parsed = parseVoiceEntry(text, now: clock(), catalog: notes,
+    var parsed = await _parse(text, notes,
       incomeOverride: editedFields.contains(VoiceField.type) ? previous.isIncome : null,
       noteOverride: editedFields.contains(VoiceField.note) ? previous.note : null);
-    if (editedFields.contains(VoiceField.amount) && previous.amount != null) parsed = parsed.copyWith(amount: previous.amount);
-    if (editedFields.contains(VoiceField.category)) parsed = parsed.copyWith(category: previous.category);
-    if (editedFields.contains(VoiceField.date)) parsed = parsed.copyWith(date: previous.date);
+    if (_closed || generation != _parseGeneration || stage != VoiceStage.review) return;
+    final current = draft!;
+    if (editedFields.contains(VoiceField.amount) && current.amount != null) parsed = parsed.copyWith(amount: current.amount);
+    if (editedFields.contains(VoiceField.category)) parsed = parsed.copyWith(category: current.category);
+    if (editedFields.contains(VoiceField.date)) parsed = parsed.copyWith(date: current.date);
     draft = parsed; reparsing = false; _publish();
   }
   Future<void> shutdown() async {
@@ -136,3 +148,9 @@ class VoiceSession extends ChangeNotifier {
   @override
   void dispose() { unawaited(shutdown()); super.dispose(); }
 }
+
+typedef _VoiceParseInput = ({String text, DateTime now, List<NoteChoice> expense,
+  List<NoteChoice> income, bool? incomeOverride, String? noteOverride});
+VoiceDraft _parseVoiceDraft(_VoiceParseInput input) => parseVoiceEntry(input.text, now: input.now,
+  catalog: NoteCatalog.fromChoices(expense: input.expense, income: input.income),
+  incomeOverride: input.incomeOverride, noteOverride: input.noteOverride);

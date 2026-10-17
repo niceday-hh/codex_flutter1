@@ -76,7 +76,19 @@ void main() {
     await session.reparseText('盒马99元');
     expect(session.draft!.amount, 60); expect(session.draft!.category, '日用');
     expect(session.draft!.date, yesterday); expect(session.draft!.warnings, isEmpty);
+    session.edit(session.draft!.copyWith(note: ''), fields: {VoiceField.note});
+    await session.reparseText('盒马99元'); expect(session.draft!.note, '');
     session.rerecord(); expect(session.editedFields, isEmpty);
+    await session.shutdown(); session.dispose();
+  });
+  test('large histories parse off the UI isolate without sending picker Future caches', () async {
+    final catalog = NoteCatalog([entry('盒马', '餐饮'),
+      for (var i=0;i<250;i++) entry('商家$i','购物')]);
+    await catalog.prepare(false, '餐饮');
+    final session = VoiceSession(FakeVoiceEngine(text: '盒马58元'), clock: () => now,
+      loadNotes: () async => catalog);
+    await session.prepare(); await session.hold(); await session.release();
+    expect(session.draft!.category, '餐饮'); expect(session.draft!.amount, 58);
     await session.shutdown(); session.dispose();
   });
 }

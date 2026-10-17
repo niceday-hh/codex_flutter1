@@ -149,7 +149,7 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
   }
   if (category == '其他') warnings.add('用途不明确，请选择分类');
   var note = explicitNote;
-  if (note == null || note.isEmpty) {
+  if (noteOverride == null && (note == null || note.isEmpty)) {
     note = body;
     for (final c in candidates.toList()..sort((a,b) => b.start.compareTo(a.start))) {
       note = note!.replaceRange(c.start, c.end, ' ');
@@ -158,9 +158,9 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
       .replaceAll(RegExp(r'记一笔|帮我记|记一下|记个账|收入|支出|花了|花费|支付了|付款|付了|一共|总共|合计|买了|购买了|买的|买|收到|到账|吃的|喝的'), ' ')
       .replaceAll(RegExp(r'[\s,，。:：;；]+'), ' ').trim();
   }
-  if (note.isEmpty) note = category;
+  if (noteOverride == null && (note == null || note.isEmpty)) note = category;
   return VoiceDraft(rawText: raw.trim(), amount: amount, isIncome: income, category: category,
-    note: note, date: date, warnings: List.unmodifiable(warnings), categoryReason: categoryReason,
+    note: note ?? '', date: date, warnings: List.unmodifiable(warnings), categoryReason: categoryReason,
     categorySuggestions: history.suggestions);
 }
 

@@ -159,13 +159,6 @@ jobs:
           (cd build/app/outputs/flutter-apk && sha256sum "${{ steps.meta.outputs.apk_name }}" > "${{ steps.meta.outputs.apk_name }}.sha256")
           cat "build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}.sha256"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: shiguang-ledger-v${{ steps.meta.outputs.version_name }}-fixed-signing-arm64
-          path: build/app/outputs/flutter-apk/${{ steps.meta.outputs.apk_name }}
-          if-no-files-found: error
-
       - name: Publish GitHub Release
         shell: bash
         env:

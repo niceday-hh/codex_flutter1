@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'app_store.dart';
 import 'app_theme.dart';
 import 'shell.dart';
+import 'voice/voice_engine_cache.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +19,8 @@ void main() {
 }
 
 class SmartBudgetApp extends StatefulWidget {
-  const SmartBudgetApp({super.key});
+  const SmartBudgetApp({super.key, this.voiceCache});
+  final VoiceEngineCache? voiceCache;
 
   @override
   State<SmartBudgetApp> createState() => _SmartBudgetAppState();
@@ -72,7 +74,7 @@ class _SmartBudgetAppState extends State<SmartBudgetApp> {
         theme: _lightTheme,
         darkTheme: _darkTheme,
         themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-        home: const AppShell(),
+        home: AppShell(voiceCache: widget.voiceCache),
       ),
     );
   }

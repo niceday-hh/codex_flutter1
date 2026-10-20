@@ -14,7 +14,8 @@ import 'pages/profile_page.dart';
 import 'pages/stats_page_v23.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.voiceCache});
+  final VoiceEngineCache? voiceCache;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -24,8 +25,17 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   final Set<int> _visited = {0};
   bool _adding = false;
-  VoiceEngineCache? _voiceCache;
+  late final VoiceEngineCache _voiceCache;
   final _addButtonKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _voiceCache = widget.voiceCache ?? VoiceEngineCache();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_voiceCache.warmUp());
+    });
+  }
 
   static const _pages = <Widget>[
     RepaintBoundary(child: HomePage()),
@@ -46,7 +56,6 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openAdd() async {
     if (_adding) return;
     _adding = true;
-    unawaited(_voiceCache?.releaseIdle());
     HapticFeedback.lightImpact();
     try {
       await Navigator.of(context).push(
@@ -79,7 +88,7 @@ class _AppShellState extends State<AppShell> {
     if (selected != 'voice' || !mounted || _adding) return;
     _adding = true;
     try {
-      final engine = (_voiceCache ??= VoiceEngineCache()).acquire();
+      final engine = _voiceCache.acquire();
       final saved = await showVoiceEntry(context, AppStoreScope.read(context), engine: engine);
       if (saved == true && mounted) {
         _goTo(0);
@@ -90,7 +99,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
-    unawaited(_voiceCache?.dispose());
+    unawaited(_voiceCache.dispose());
     super.dispose();
   }
 

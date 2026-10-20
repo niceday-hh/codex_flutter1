@@ -154,7 +154,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
           const Spacer(), IconButton(tooltip: '关闭语音输入', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, size: 20))]),
         Text(review ? '确认这笔账' : '语音记账', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text(review ? '已识别，请核对' : recording ? '● 正在聆听… ${_session.seconds}s' : stage == VoiceStage.recognizing ? '正在识别并拆分…' : stage == VoiceStage.preparing ? '首次准备离线语音，稍等片刻…' : stage == VoiceStage.starting ? '正在开启麦克风…' : '按住说话，松开识别',
+        Text(review ? '已识别，请核对' : recording ? '● 正在聆听… ${_session.seconds}s' : stage == VoiceStage.recognizing ? '正在识别并拆分…' : stage == VoiceStage.preparing ? '正在准备离线语音，稍等片刻…' : stage == VoiceStage.starting ? '正在开启麦克风…' : '按住说话，松开识别',
           style: theme.textTheme.bodyMedium?.copyWith(color: recording ? AppPalette.mint : theme.textTheme.bodySmall?.color)),
         const SizedBox(height: 16),
         Flexible(child: SingleChildScrollView(child: review && draft != null ? _review(draft) : Column(children: [

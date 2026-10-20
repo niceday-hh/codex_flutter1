@@ -4,6 +4,7 @@ import 'package:smart_budget/app_store.dart';
 import 'package:smart_budget/app_theme.dart';
 import 'package:smart_budget/shell.dart';
 import 'package:smart_budget/voice/voice_sheet.dart';
+import 'package:smart_budget/voice/voice_engine_cache.dart';
 import 'voice_session_test.dart' show FakeVoiceEngine;
 
 void main() {
@@ -59,7 +60,9 @@ void main() {
   });
   testWidgets('long pressing plus opens voice menu and tapping plus keeps manual entry', (tester) async {
     late AppStore store;await tester.runAsync(() async {store=AppStore();await store.ready;});
-    await tester.pumpWidget(AppStoreScope(store:store,child:MaterialApp(theme:buildTheme(),home:const AppShell())));
+    final voiceCache = VoiceEngineCache(factory: () => FakeVoiceEngine());
+    voiceCache.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpWidget(AppStoreScope(store:store,child:MaterialApp(theme:buildTheme(),home:AppShell(voiceCache:voiceCache))));
     await tester.pumpAndSettle();
     await tester.longPress(find.byIcon(Icons.add_rounded));await tester.pumpAndSettle();
     expect(find.text('语音记账'),findsOneWidget);expect(find.text('记一笔'),findsNothing);

@@ -16,8 +16,11 @@ abstract class VoiceEngine {
 
 // Native asset extraction and FFI inference never run on the Flutter UI isolate.
 class ParaformerVoiceEngine implements VoiceEngine {
+  ParaformerVoiceEngine({AudioRecorder Function()? recorderFactory})
+      : _recorderFactory = recorderFactory ?? AudioRecorder.new;
   static const _channel = MethodChannel('smart_budget/voice');
-  final _recorder = AudioRecorder();
+  final AudioRecorder Function() _recorderFactory;
+  AudioRecorder? _recorder;
   final _levels = StreamController<double>.broadcast();
   StreamSubscription<Amplitude>? _amplitude;
   final _pending = <int, Completer<String>>{};
@@ -86,12 +89,14 @@ class ParaformerVoiceEngine implements VoiceEngine {
   @override
   Future<bool> start() async {
     await prepare();
-    if (_closed || !await _recorder.hasPermission()) return false;
+    if (_closed) return false;
+    final recorder = _recorder ??= _recorderFactory();
+    if (!await recorder.hasPermission()) return false;
     if (_closed) return false;
     _recordPath = '$_cacheDir/voice-${DateTime.now().microsecondsSinceEpoch}.wav';
-    await _recorder.start(const RecordConfig(encoder: AudioEncoder.wav,
+    await recorder.start(const RecordConfig(encoder: AudioEncoder.wav,
       sampleRate: 16000, numChannels: 1, autoGain: true, noiseSuppress: true, echoCancel: true), path: _recordPath!);
-    _amplitude = _recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((a) {
+    _amplitude = recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((a) {
       if (!_levels.isClosed) _levels.add(((a.current + 55) / 55).clamp(0.0, 1.0).toDouble());
     });
     return true;
@@ -100,7 +105,7 @@ class ParaformerVoiceEngine implements VoiceEngine {
   @override
   Future<String?> stop() async {
     await _amplitude?.cancel(); _amplitude = null;
-    final path = await _recorder.stop();
+    final path = await _recorder?.stop();
     if (path == null || _closed) { await _deleteRecording(); return null; }
     try { return await _request('decode', path); }
     finally { await _deleteRecording(); }
@@ -112,7 +117,7 @@ class ParaformerVoiceEngine implements VoiceEngine {
   @override
   Future<void> cancel() async {
     await _amplitude?.cancel(); _amplitude = null;
-    await _recorder.cancel();
+    await _recorder?.cancel();
     await _deleteRecording();
   }
   Future<void> _closeWorker() async {
@@ -133,7 +138,7 @@ class ParaformerVoiceEngine implements VoiceEngine {
     _closed = true;
     try { await cancel(); await _preparing; } catch (_) {}
     await _closeWorker();
-    try { await _recorder.dispose(); } catch (_) {}
+    try { await _recorder?.dispose(); } catch (_) {}
     await _levels.close();
   }
 }

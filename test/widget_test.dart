@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_budget/main.dart';
+import 'package:smart_budget/voice/voice_engine_cache.dart';
+import 'voice_session_test.dart' show FakeVoiceEngine;
 
 void main() {
   testWidgets('shows Shiguang ledger shell and primary navigation', (tester) async {
-    await tester.pumpWidget(const SmartBudgetApp());
+    final voiceCache = VoiceEngineCache(factory: () => FakeVoiceEngine());
+    voiceCache.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpWidget(SmartBudgetApp(voiceCache: voiceCache));
     await tester.pumpAndSettle();
 
     expect(find.text('拾光账本'), findsOneWidget);
@@ -14,7 +18,9 @@ void main() {
   });
 
   testWidgets('primary tabs switch through a single IndexedStack', (tester) async {
-    await tester.pumpWidget(const SmartBudgetApp());
+    final voiceCache = VoiceEngineCache(factory: () => FakeVoiceEngine());
+    voiceCache.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpWidget(SmartBudgetApp(voiceCache: voiceCache));
     await tester.pumpAndSettle();
 
     final stackFinder = find.byType(IndexedStack);

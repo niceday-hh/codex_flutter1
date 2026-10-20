@@ -140,7 +140,7 @@ class _VoiceLease implements VoiceEngine {
       if (_closed || generation != _generation) throw StateError('语音已暂停，请重新录音');
       _failed = false;
       _forward ??= engine.levels.listen((value) { if (!_levels.isClosed) _levels.add(value); });
-    } catch (_) { _failed = true; rethrow; }
+    } catch (_) { if (!_closed && generation == _generation) _failed = true; rethrow; }
   }
   @override Future<bool> start() async {
     await prepare(); return (await _get()).start();
@@ -153,7 +153,7 @@ class _VoiceLease implements VoiceEngine {
     try {
       final text = await (await engine).stop();
       return _closed || generation != _generation ? null : text;
-    } catch (_) { _failed = true; rethrow; }
+    } catch (_) { if (!_closed && generation == _generation) _failed = true; rethrow; }
     finally { _decoding = false; }
   }
   @override Future<void> cancel() async {

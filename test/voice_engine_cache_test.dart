@@ -93,6 +93,20 @@ void main() {
     await lease.close(); await tick(); expect(engines.last.closed, isTrue); expect(engines.length, 2);
     await cache.dispose();
   });
+  test('late failure of an old lease cannot evict the model prepared after resume', () async {
+    final engines = <PreparedEngine>[];
+    final gate = Completer<void>();
+    final cache = cacheFor(engines, factory: () => engines.isEmpty
+      ? (PreparedEngine()..prepareGate = gate) : PreparedEngine());
+    final lease = cache.acquire();
+    final oldPreparing = lease.prepare().then<void>((_) {}, onError: (_) {});
+    await tick(); cache.didChangeAppLifecycleState(AppLifecycleState.paused); await tick();
+    cache.didChangeAppLifecycleState(AppLifecycleState.resumed); await cache.warmUp(); await lease.prepare();
+    gate.complete(); await oldPreparing;
+    await lease.close(); await tick();
+    expect(engines.length, 2); expect(engines.last.closed, isFalse);
+    await cache.dispose();
+  });
   test('failed preload is retired and can be retried before recording', () async {
     final engines = <PreparedEngine>[];
     final cache = cacheFor(engines, factory: () => PreparedEngine()..fail = engines.isEmpty);

@@ -1,5 +1,6 @@
 import '../notes/note_catalog.dart';
 import 'voice_category.dart';
+import 'voice_date.dart';
 
 // Local, deterministic Mandarin bookkeeping rules with personal note history.
 class VoiceDraft {
@@ -36,6 +37,28 @@ class _Money {
 
 const _number = r'[0-9零〇一二两三四五六七八九十百千万亿]+(?:[.点][0-9零〇一二两三四五六七八九]+)?';
 
+// Restrict negation removal to explicit rejected phrases. Do not strip arbitrary
+// prose after a bare “不”; keep the affirmative replacement and original raw text.
+String _withoutRejectedPhrases(String text) {
+  return text.replaceAll(RegExp(
+      r'(?:不是|并非|不算)(?:(?![,，;；]|而是|是).)+?(?:[,，;；]\s*(?:而)?是|而是|是)'), ' ')
+    .replaceAll(RegExp(
+      '(?:没有|还没|没|未)(?:有)?(?:收到|收入|到账|报销|退款|发工资)'
+      '(?:工资|薪水|奖金|钱|款)?(?:\\s*$_number(?:元|块)(?:钱)?)?'), ' ');
+}
+
+String _maskNonMoney(String text) {
+  var masked = text;
+  void mask(RegExp pattern) {
+    masked = masked.replaceAllMapped(pattern, (m) => ' ' * m[0]!.length);
+  }
+  // Clock times must not mask decimal prices such as “二十八点五元”.
+  mask(RegExp(r'(?:[0-9]{1,2}|[一二两三四五六七八九十]+)[点时](?:半|(?:[0-9]{1,2}|[一二三四五六七八九十]+)分)?(?=\s|[,，]|花|买|吃|喝|付|收到|打车|$)'));
+  mask(RegExp(r'\d{1,2}:\d{2}(?::\d{2})?'));
+  mask(RegExp('$_number\\s*(?:分钟|小时|秒钟|秒|公里|千米|公斤|千克|毫升|升|厘米|平方米|个月|天|年|月|日|号|个|杯|件|瓶|份|斤|包|张|次|人|折|笔|期|积分|分贝|码|成)(?![元块])'));
+  return masked;
+}
+
 VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
     bool? incomeOverride, String? noteOverride}) {
   final today = now ?? DateTime.now();
@@ -51,41 +74,31 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
   final explicitNote = noteOverride ?? (trailingTransaction == null ? noteTail : noteTail!.substring(0, trailingTransaction.start).trim());
   var body = noteMarker == null ? text : text.substring(0, noteMarker.start);
   if (trailingTransaction != null) body += ' ${noteTail!.substring(trailingTransaction.end)}';
-  var date = today;
-  final absoluteDate = RegExp(r'(?:([0-9]{4})年)?([0-9]{1,2})月([0-9]{1,2})[日号]').firstMatch(body);
-  if (absoluteDate != null) {
-    final year = int.parse(absoluteDate[1] ?? '${today.year}');
-    final month = int.parse(absoluteDate[2]!); final day = int.parse(absoluteDate[3]!);
-    final parsed = DateTime(year, month, day, today.hour, today.minute);
-    if (parsed.year == year && parsed.month == month && parsed.day == day) { date = parsed; }
-    else { warnings.add('日期不明确，请核对'); }
-    body = body.replaceRange(absoluteDate.start, absoluteDate.end, ' ');
-  } else if (body.contains('大前天')) { date = today.subtract(const Duration(days: 3)); }
-  else if (body.contains('前天')) { date = today.subtract(const Duration(days: 2)); }
-  else if (body.contains('昨天') || body.contains('昨晚')) { date = today.subtract(const Duration(days: 1)); }
-  final weekday = RegExp(r'(上周|这周|本周)(?:星期|礼拜)?([一二三四五六日天])|(?:周|星期|礼拜)([一二三四五六日天])').firstMatch(body);
-  if (weekday != null) {
-    final target = '一二三四五六日'.indexOf((weekday[2] ?? weekday[3])!.replaceAll('天', '日')) + 1;
-    var offset = today.weekday - target;
-    if (weekday[1] == '上周') { offset += 7; }
-    else if (weekday[1] == null && offset < 0) { offset += 7; }
-    date = today.subtract(Duration(days: offset));
-    body = body.replaceRange(weekday.start, weekday.end, ' ');
-  }
-  body = body.replaceAll(RegExp(r'(?:今天|昨天|前天|大前天|昨晚|刚才|刚刚|早上|中午|晚上|上午|下午)'), ' ')
-    .replaceAll(RegExp(r'(?:\d{1,2}|[一二三四五六七八九十]+)[点时](?:半|(?:\d{1,2}|[一二三四五六七八九十]+)分)?(?=\s|[,，]|花|买|吃|喝|付|收到|打车|$)'), ' ');
-  // Negated income phrases must not turn purchases into income.
-  final typeBody = body.replaceAll(RegExp(r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到(?:工资|薪水|奖金)?|收入|到账|报销|退款|发工资|工资)'), ' ');
-  final explicitIncome = RegExp(r'收入|进账|到账|收到|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody);
+  body = _withoutRejectedPhrases(body);
+  final parsedDate = parseVoiceDate(body, today);
+  final date = parsedDate.date;
+  warnings.addAll(parsedDate.warnings);
+  body = parsedDate.body;
+  // Keep quantity/duration spans in the note, but mask them for all money rules.
+  // Equal-length masking preserves offsets used by note extraction.
+  final moneyBody = _maskNonMoney(body);
+  final typeBody = body.replaceAll(RegExp(
+      r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到(?:工资|薪水|奖金)?|收入|到账|报销|退款|发工资|工资)'), ' ');
+  final cashReceipt = RegExp('收到\\s*(?:$_number(?:元|块|毛|角)|钱|款|工资|薪水|奖金|红包|转账|退款|报销|货款)').hasMatch(typeBody);
+  final explicitIncome = RegExp(r'收入|进账|到账|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody) || cashReceipt;
   final implicitIncome = RegExp(r'薪水|工资|奖金|利息|分红').hasMatch(typeBody)
     && !RegExp(r'买|购买|花|支付|付给|转给|还没|没发|没有').hasMatch(body);
-  final income = incomeOverride ?? (!body.contains('支出') && (explicitIncome || implicitIncome)
-    && !RegExp(r'(?:转给|给别人|还给|付给|借给)').hasMatch(typeBody));
+  final outgoing = RegExp(r'支出|转给|给别人|还给|付给|借给').hasMatch(typeBody);
+  final income = incomeOverride ?? (!outgoing && (explicitIncome || implicitIncome));
+  if (incomeOverride == null && explicitIncome &&
+      RegExp('(?:花了?|支付了?|付了?)\\s*$_number').hasMatch(typeBody)) {
+    warnings.add('同时提到收款和付款，请核对收支类型与金额');
+  }
   final candidates = <_Money>[];
   void add(RegExp pattern, double Function(RegExpMatch) value) {
-    for (final m in pattern.allMatches(body)) {
+    for (final m in pattern.allMatches(moneyBody)) {
       if (candidates.any((c) => m.start < c.end && m.end > c.start)) continue;
-      final prefix = body.substring(m.start > 12 ? m.start - 12 : 0, m.start);
+      final prefix = moneyBody.substring(m.start > 12 ? m.start - 12 : 0, m.start);
       final priority = RegExp(r'不对|改成|应该是|实际|实付|最后|最终').hasMatch(prefix) ? 3 :
         RegExp(r'一共|总共|合计|总计').hasMatch(prefix) ? 2 : 0;
       candidates.add(_Money(m.start, m.end, value(m), priority));
@@ -108,8 +121,8 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
   add(RegExp('(?:花了?|付了?|支付了?|支出|收入|收到|到账|金额|价格|付款|收款|赚了?|一共|总共|合计|实付|改成|应该是)\\s*($_number)'), (m) => mandarinNumber(m[1]!));
   if (candidates.isEmpty) {
     // Bare amounts are accepted only when not followed by a quantity/date unit.
-    for (final m in RegExp(_number).allMatches(body)) {
-      final suffix = body.substring(m.end);
+    for (final m in RegExp(_number).allMatches(moneyBody)) {
+      final suffix = moneyBody.substring(m.end);
       if (RegExp(r'^\s*(?:个|杯|件|瓶|份|斤|公斤|千克|包|张|次|年|月|日|号|点|时|分钟|公里|人|折|笔)').hasMatch(suffix)) continue;
       candidates.add(_Money(m.start, m.end, mandarinNumber(m[0]!), 0));
     }
@@ -154,7 +167,8 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
     for (final c in candidates.toList()..sort((a,b) => b.start.compareTo(a.start))) {
       note = note!.replaceRange(c.start, c.end, ' ');
     }
-    note = note!.replaceAll(RegExp(r'分类(?:为|是)?\s*[\u4e00-\u9fa5]+'), ' ')
+    note = note!.replaceAll(RegExp(r'刚才|刚刚|早上|中午|晚上|上午|下午'), ' ')
+      .replaceAll(RegExp(r'分类(?:为|是)?\s*[\u4e00-\u9fa5]+'), ' ')
       .replaceAll(RegExp(r'记一笔|帮我记|记一下|记个账|收入|支出|花了|花费|支付了|付款|付了|一共|总共|合计|买了|购买了|买的|买|收到|到账|吃的|喝的'), ' ')
       .replaceAll(RegExp(r'[\s,，。:：;；]+'), ' ').trim();
   }
@@ -236,3 +250,4 @@ const _expenseRules = {
   '维修':['修理','维修'], '捐赠':['捐赠','捐款'], '彩票':['彩票'], '快递':['快递','运费','邮费'],
   '亲友':['借给','还给','转给'], '社交':['请客','社交'],
 };
+

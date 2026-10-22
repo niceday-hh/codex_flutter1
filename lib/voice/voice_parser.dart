@@ -84,7 +84,7 @@ VoiceDraft parseVoiceEntry(String raw, {DateTime? now, NoteCatalog? catalog,
   final moneyBody = _maskNonMoney(body);
   final typeBody = body.replaceAll(RegExp(
       r'(?:没有|还没|没|未|不是|不算)(?:有)?(?:收到(?:工资|薪水|奖金)?|收入|到账|报销|退款|发工资|工资)'), ' ');
-  final cashReceipt = RegExp('收到\\s*(?:$_number(?:元|块|毛|角)|钱|款|工资|薪水|奖金|红包|转账|退款|报销|货款)').hasMatch(typeBody);
+  final cashReceipt = RegExp('收到\\s*(?:$_number|钱|款|工资|薪水|奖金|红包|转账|退款|报销|货款)').hasMatch(_maskNonMoney(typeBody));
   final explicitIncome = RegExp(r'收入|进账|到账|收款|赚了|挣了|发工资|工资发了|领工资|报销|退款|退回|退了').hasMatch(typeBody) || cashReceipt;
   final implicitIncome = RegExp(r'薪水|工资|奖金|利息|分红').hasMatch(typeBody)
     && !RegExp(r'买|购买|花|支付|付给|转给|还没|没发|没有').hasMatch(body);

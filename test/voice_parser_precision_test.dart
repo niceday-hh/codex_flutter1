@@ -88,7 +88,7 @@ void main() {
     for (final text in ['收到快递，付了运费12元', '收到外卖花了28元', '收到2件快递，运费12元']) {
       expect(parse(text).isIncome, isFalse, reason: text);
     }
-    for (final text in ['收到工资8000元', '收到500元', '收到红包200元', '退款十二元', '报销交通费50元']) {
+    for (final text in ['收到工资8000元', '收到500元', '收到五百', '收到红包200元', '退款十二元', '报销交通费50元']) {
       expect(parse(text).isIncome, isTrue, reason: text);
     }
     expect(parse('收到工资8000元，花了28元').warnings, contains('同时提到收款和付款，请核对收支类型与金额'));
@@ -102,6 +102,8 @@ void main() {
     expect(parse('不是支出，是收入500元').isIncome, isTrue);
     expect(parse('不是20元，是25元买纸巾').amount, 25);
     expect(parse('还没收到工资，买奶茶18元').isIncome, isFalse);
+    expect(parse('还没收到工资买奶茶18元').amount, 18);
+    expect(parse('不是收入是支出20元买纸巾').isIncome, isFalse);
     expect(parse('不是买药而是买纸巾20元').category, '日用');
     expect(parse('午饭28元，不对，改成25元').amount, 25);
   });

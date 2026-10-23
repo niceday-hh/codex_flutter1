@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
 import '../app_theme.dart';
 
@@ -280,8 +281,8 @@ class _ChoiceTarget extends StatelessWidget {
     final ink = voice ? const Color(0xFF147D70) : AppPalette.primaryDeep;
     final tint = voice ? AppPalette.mintSoft : AppPalette.primarySoft;
     final duration = MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 110);
-    return Semantics(button: true, selected: selected,
-      label: voice ? '语音记账' : '手动记账',
+    return Semantics(button: true, selected: selected, excludeSemantics: true,
+      label: voice ? '语音记账' : '手动记账', onTap: onTap,
       child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           AnimatedScale(scale: selected ? 1.13 : 1, duration: duration, curve: Curves.easeOutCubic,

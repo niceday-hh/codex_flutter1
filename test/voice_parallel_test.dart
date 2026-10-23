@@ -168,4 +168,17 @@ void main() {
     cache.didChangeAppLifecycleState(AppLifecycleState.resumed); await cache.warmUp();
     expect(engine.preparations, 1); await cache.dispose();
   });
+  test('resume checks elapsed time even if background timer was suspended', () async {
+    var now = DateTime(2026, 10, 23);
+    final engines = <FakeVoiceEngine>[];
+    final cache = VoiceEngineCache(clock: () => now, factory: () {
+      final engine = FakeVoiceEngine(); engines.add(engine); return engine;
+    });
+    cache.didChangeAppLifecycleState(AppLifecycleState.resumed); await cache.warmUp();
+    cache.didChangeAppLifecycleState(AppLifecycleState.hidden); await tick();
+    now = now.add(const Duration(seconds: 20));
+    cache.didChangeAppLifecycleState(AppLifecycleState.resumed); await cache.warmUp();
+    expect(engines.first.closed, isTrue); expect(engines.length, 2);
+    await cache.dispose();
+  });
 }

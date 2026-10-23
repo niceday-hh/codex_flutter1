@@ -134,6 +134,13 @@ class VoiceEngineCache with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Android may suspend Dart timers while backgrounded. Check wall time
+      // before reuse so a delayed timer cannot extend the chosen retention.
+      final since = _backgroundSince;
+      if (_background && since != null &&
+          _clock().difference(since) >= _backgroundRetention && _engine != null) {
+        _active?._reset(); unawaited(_retire());
+      }
       _backgroundTimer?.cancel(); _backgroundTimer = null; _backgroundSince = null;
       _background = false;
       if (_enabled) unawaited(warmUp());

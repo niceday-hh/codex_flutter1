@@ -3,6 +3,7 @@ import 'app_store.dart';
 import 'voice/voice_engine_cache.dart';
 import 'voice/voice_sheet.dart';
 import 'widgets/active_store_scope.dart';
+import 'widgets/entry_launcher.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,7 +27,6 @@ class _AppShellState extends State<AppShell> {
   final Set<int> _visited = {0};
   bool _adding = false;
   late final VoiceEngineCache _voiceCache;
-  final _addButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -71,21 +71,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _voiceOptions() async {
-    if (_adding) return;
+  Future<void> _openVoice() async {
+    if (_adding || !mounted) return;
     HapticFeedback.lightImpact();
-    final anchor = _addButtonKey.currentContext!.findRenderObject() as RenderBox;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final origin = anchor.localToGlobal(Offset.zero, ancestor: overlay);
-    final selected = await showMenu<String>(context: context,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      position: RelativeRect.fromRect(Rect.fromLTWH(origin.dx - 55, origin.dy - 90, 180, 80), Offset.zero & overlay.size),
-      items: [const PopupMenuItem(value: 'voice', child: Row(children: [
-        Icon(Icons.mic_rounded, color: AppPalette.mint), SizedBox(width: 12),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('语音记账', style: TextStyle(fontWeight: FontWeight.w700)),
-          Text('按住说话，松开识别', style: TextStyle(fontSize: 11))])]))]);
-    if (selected != 'voice' || !mounted || _adding) return;
     _adding = true;
     try {
       final engine = _voiceCache.acquire();
@@ -164,53 +152,10 @@ class _AppShellState extends State<AppShell> {
                       selected: _index == 1,
                       onTap: () => _goTo(1),
                     ),
-                    Expanded(
-                      child: Center(
-                        child: Transform.translate(
-                          offset: const Offset(0, 0),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            key: _addButtonKey,
-                            onTap: _openAdd,
-                            onLongPress: _voiceOptions,
-                            child: SizedBox(
-                              width: 70,
-                              height: 70,
-                              child: Center(
-                                child: Container(
-                                  width: 54,
-                                  height: 54,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: const LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [Color(0xFFFFC457), AppPalette.primary],
-                                    ),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.82),
-                                      width: 2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppPalette.primary.withValues(alpha: 0.28),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_rounded,
-                                    size: 34,
-                                    color: AppPalette.ink,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    Expanded(child: Center(child: EntryLauncher(
+                      onManual: () => unawaited(_openAdd()),
+                      onVoice: () => unawaited(_openVoice()),
+                    ))),
                     _NavItem(
                       icon: Icons.account_balance_wallet_outlined,
                       label: '预算',
@@ -324,5 +269,6 @@ class _WarmBackground extends StatelessWidget {
     );
   }
 }
+
 
 

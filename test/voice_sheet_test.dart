@@ -58,17 +58,44 @@ void main() {
     expect(store.entries.length,before);expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
-  testWidgets('long pressing plus opens voice menu and tapping plus keeps manual entry', (tester) async {
+  testWidgets('sliding back cancels the picker and tapping plus keeps manual entry', (tester) async {
     late AppStore store;await tester.runAsync(() async {store=AppStore();await store.ready;});
     final voiceCache = VoiceEngineCache(factory: () => FakeVoiceEngine());
     voiceCache.didChangeAppLifecycleState(AppLifecycleState.resumed);
     await tester.pumpWidget(AppStoreScope(store:store,child:MaterialApp(theme:buildTheme(),home:AppShell(voiceCache:voiceCache))));
     await tester.pumpAndSettle();
-    await tester.longPress(find.byIcon(Icons.add_rounded));await tester.pumpAndSettle();
-    expect(find.text('语音记账'),findsOneWidget);expect(find.text('记一笔'),findsNothing);
-    await tester.tapAt(const Offset(10,10));await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.add_rounded));await tester.pumpAndSettle();
+    final origin = tester.getCenter(find.byKey(const ValueKey('entry-launcher')));
+    final pointer = await tester.startGesture(origin);
+    await pointer.moveTo(origin + const Offset(0, -40));await tester.pumpAndSettle();
+    expect(find.text('语音记账'),findsOneWidget);expect(find.text('手动记账'),findsOneWidget);
+    await pointer.moveTo(origin);await pointer.up();await tester.pumpAndSettle();
+    expect(find.text('语音记账'),findsNothing);
+    await tester.tap(find.byKey(const ValueKey('entry-launcher')));await tester.pumpAndSettle();
     expect(find.text('记一笔'),findsOneWidget);expect(tester.takeException(),isNull);
+    await tester.pumpWidget(const SizedBox.shrink());store.dispose();
+  });
+  testWidgets('release over voice opens the existing sheet without recording or saving', (tester) async {
+    tester.view.physicalSize=const Size(390,844);tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
+    late AppStore store;await tester.runAsync(() async {store=AppStore();await store.ready;});
+    final engine=FakeVoiceEngine();
+    final voiceCache=VoiceEngineCache(factory:()=>engine);
+    voiceCache.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpWidget(AppStoreScope(store:store,child:MaterialApp(theme:buildTheme(),home:AppShell(voiceCache:voiceCache))));
+    await tester.pumpAndSettle();final before=store.entries.length;
+    final origin=tester.getCenter(find.byKey(const ValueKey('entry-launcher')));
+    final pointer=await tester.startGesture(origin);
+    await pointer.moveTo(origin+const Offset(0,-40));await tester.pumpAndSettle();
+    await pointer.moveTo(tester.getCenter(find.byKey(const ValueKey('entry-voice-target'))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('voice-record')),findsNothing);expect(engine.starts,0);
+    await pointer.up();await settle(tester);
+    expect(find.byKey(const ValueKey('voice-record')),findsOneWidget);
+    expect(engine.starts,0);expect(store.entries.length,before);
+    await record(tester);expect(engine.starts,1);expect(store.entries.length,before);
+    await tester.tap(find.byKey(const ValueKey('voice-confirm')));await settle(tester);
+    expect(store.entries.length,before+1);expect(store.entries.first.amount,28.5);
+    expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
   testWidgets('correct original text uses personal notes and opens the complete note picker without saving', (tester) async {
@@ -100,3 +127,4 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
 }
+

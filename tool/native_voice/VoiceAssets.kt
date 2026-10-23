@@ -14,6 +14,17 @@ class VoiceAssets(private val activity: Activity) {
     fun attach(engine: FlutterEngine) {
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "smart_budget/voice")
         channel!!.setMethodCallHandler { call, result ->
+            // Fast recording setup bypasses the model extraction executor.
+            if (call.method == "recordDirectory") {
+                try {
+                    val records = File(activity.cacheDir, "voice-recordings")
+                    check(records.exists() || records.mkdirs())
+                    result.success(records.absolutePath)
+                } catch (error: Exception) {
+                    result.error("VOICE_RECORD_DIRECTORY_FAILED", error.message, null)
+                }
+                return@setMethodCallHandler
+            }
             if (call.method != "prepare") { result.notImplemented(); return@setMethodCallHandler }
             executor.execute {
                 try {
@@ -49,3 +60,4 @@ class VoiceAssets(private val activity: Activity) {
     }
     fun close() { channel?.setMethodCallHandler(null); executor.shutdown() }
 }
+

@@ -27,6 +27,7 @@ class _AppShellState extends State<AppShell> {
   final Set<int> _visited = {0};
   bool _adding = false;
   late final VoiceEngineCache _voiceCache;
+  AppStore? _settingsStore;
 
   @override
   void initState() {
@@ -35,6 +36,23 @@ class _AppShellState extends State<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_voiceCache.warmUp());
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final store = AppStoreScope.read(context);
+    if (identical(_settingsStore, store)) return;
+    _settingsStore?.removeListener(_syncVoiceSettings);
+    _settingsStore = store;
+    store.addListener(_syncVoiceSettings);
+    _syncVoiceSettings();
+  }
+
+  void _syncVoiceSettings() {
+    final store = _settingsStore!;
+    _voiceCache.setBackgroundRetention(store.keepVoiceModelInBackground
+      ? Duration(seconds: store.voiceBackgroundSeconds) : Duration.zero);
   }
 
   static const _pages = <Widget>[
@@ -87,6 +105,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    _settingsStore?.removeListener(_syncVoiceSettings);
     unawaited(_voiceCache.dispose());
     super.dispose();
   }
@@ -269,6 +288,7 @@ class _WarmBackground extends StatelessWidget {
     );
   }
 }
+
 
 
 

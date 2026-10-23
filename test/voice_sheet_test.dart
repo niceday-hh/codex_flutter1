@@ -6,6 +6,7 @@ import 'package:smart_budget/shell.dart';
 import 'package:smart_budget/voice/voice_sheet.dart';
 import 'package:smart_budget/voice/voice_engine_cache.dart';
 import 'voice_session_test.dart' show FakeVoiceEngine;
+import 'voice_parallel_test.dart' show ColdEngine;
 
 void main() {
   Future<void> settle(WidgetTester tester) async {
@@ -28,6 +29,22 @@ void main() {
     await tester.pump();expect(find.textContaining('正在聆听'),findsOneWidget);
     await pointer.up();await settle(tester);
   }
+  testWidgets('cold sheet records immediately and waits only after release', (tester) async {
+    final engine=ColdEngine();final store=await build(tester,engine);final before=store.entries.length;
+    expect(find.text('模型准备中，可以先说话'),findsOneWidget);
+    final pointer=await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('voice-record'))));
+    await tester.pump();
+    expect(find.textContaining('正在聆听'),findsOneWidget);expect(engine.starts,1);
+    expect(engine.ready.isCompleted,isFalse);
+    await pointer.up();await tester.pump();
+    expect(find.text('已录好，正在准备识别…'),findsOneWidget);expect(engine.captured,isTrue);
+    expect(store.entries.length,before);
+    engine.ready.complete();await settle(tester);
+    expect(find.text('确认这笔账'),findsOneWidget);expect(find.text('¥ 28.50'),findsOneWidget);
+    expect(store.entries.length,before);
+    await tester.tap(find.byTooltip('关闭语音输入'));await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());store.dispose();
+  });
   testWidgets('release reviews the parsed draft; confirm saves exactly once', (tester) async {
     final engine=FakeVoiceEngine();final store=await build(tester,engine);final before=store.entries.length;
     await record(tester);
@@ -127,4 +144,5 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());store.dispose();
   });
 }
+
 

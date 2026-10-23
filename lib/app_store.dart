@@ -62,6 +62,8 @@ class AppStore extends ChangeNotifier {
   bool hideAmounts = false;
   bool dailyReminder = true;
   bool darkMode = false;
+  bool keepVoiceModelInBackground = true;
+  int voiceBackgroundSeconds = 15;
   int reminderHour = 20;
   int reminderMinute = 30;
   final Map<String, double> categoryBudgets = {
@@ -225,6 +227,16 @@ class AppStore extends ChangeNotifier {
     _changed(entriesChanged: false, preference: 'darkMode');
   }
 
+  void setKeepVoiceModelInBackground(bool value) {
+    keepVoiceModelInBackground = value;
+    _changed(entriesChanged: false, preference: 'keepVoiceModelInBackground');
+  }
+
+  void setVoiceBackgroundSeconds(int value) {
+    voiceBackgroundSeconds = value.clamp(5, 30);
+    _changed(entriesChanged: false, preference: 'voiceBackgroundSeconds');
+  }
+
   void setReminderTime(int hour, int minute) {
     reminderHour = hour;
     reminderMinute = minute;
@@ -353,6 +365,12 @@ class AppStore extends ChangeNotifier {
       if (!_changedPreferences.contains('hideAmounts')) hideAmounts = data['hideAmounts'] as bool? ?? hideAmounts;
       if (!_changedPreferences.contains('dailyReminder')) dailyReminder = data['dailyReminder'] as bool? ?? dailyReminder;
       if (!_changedPreferences.contains('darkMode')) darkMode = data['darkMode'] as bool? ?? darkMode;
+      if (!_changedPreferences.contains('keepVoiceModelInBackground')) {
+        keepVoiceModelInBackground = data['keepVoiceModelInBackground'] as bool? ?? keepVoiceModelInBackground;
+      }
+      if (!_changedPreferences.contains('voiceBackgroundSeconds')) {
+        voiceBackgroundSeconds = ((data['voiceBackgroundSeconds'] as num?)?.toInt() ?? voiceBackgroundSeconds).clamp(5, 30);
+      }
       if (!_changedPreferences.contains('reminderTime')) {
         reminderHour = (data['reminderHour'] as num?)?.toInt() ?? reminderHour;
         reminderMinute = (data['reminderMinute'] as num?)?.toInt() ?? reminderMinute;
@@ -402,6 +420,8 @@ class AppStore extends ChangeNotifier {
         'hideAmounts': hideAmounts, 'dailyReminder': dailyReminder,
         'darkMode': darkMode, 'reminderHour': reminderHour,
         'reminderMinute': reminderMinute,
+        'keepVoiceModelInBackground': keepVoiceModelInBackground,
+        'voiceBackgroundSeconds': voiceBackgroundSeconds,
         'categoryBudgets': Map<String, double>.of(categoryBudgets),
         'entries': List<LedgerEntry>.of(_entries),
       };
@@ -543,3 +563,4 @@ String _encodeLedger(Map<String, Object?> snapshot) {
   data['entries'] = (snapshot['entries'] as List<LedgerEntry>).map((e) => e.toJson()).toList();
   return jsonEncode(data);
 }
+

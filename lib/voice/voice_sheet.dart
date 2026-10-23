@@ -39,7 +39,8 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && [VoiceStage.starting, VoiceStage.recording].contains(_session.stage)) {
+    if (state == AppLifecycleState.resumed) unawaited(_session.prepare(refresh: true));
+    if (state != AppLifecycleState.resumed && [VoiceStage.starting, VoiceStage.recording, VoiceStage.recognizing].contains(_session.stage)) {
       unawaited(_session.cancelHold());
     }
   }
@@ -154,8 +155,10 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> with WidgetsBindingOb
           const Spacer(), IconButton(tooltip: '关闭语音输入', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, size: 20))]),
         Text(review ? '确认这笔账' : '语音记账', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text(review ? '已识别，请核对' : recording ? '● 正在聆听… ${_session.seconds}s' : stage == VoiceStage.recognizing ? '正在识别并拆分…' : stage == VoiceStage.preparing ? '正在准备离线语音，稍等片刻…' : stage == VoiceStage.starting ? '正在开启麦克风…' : '按住说话，松开识别',
+        Text(review ? '已识别，请核对' : recording ? '● 正在聆听… ${_session.seconds}s' : stage == VoiceStage.recognizing ? (_session.modelPreparing ? '已录好，正在准备识别…' : '正在识别并拆分…') : stage == VoiceStage.preparing ? '模型准备中，可以先说话' : stage == VoiceStage.starting ? '正在开启麦克风…' : '按住说话，松开识别',
           style: theme.textTheme.bodyMedium?.copyWith(color: recording ? AppPalette.mint : theme.textTheme.bodySmall?.color)),
+        if (_session.modelPreparing && !review && stage != VoiceStage.recognizing)
+          Padding(padding: const EdgeInsets.only(top: 6), child: Text('模型准备中，可以先说话', style: theme.textTheme.bodySmall)),
         const SizedBox(height: 16),
         Flexible(child: SingleChildScrollView(child: review && draft != null ? _review(draft) : Column(children: [
           Container(width: 118, height: 118, decoration: BoxDecoration(shape: BoxShape.circle, color: AppPalette.primary.withValues(alpha: .1),
@@ -252,3 +255,4 @@ class _WavePainter extends CustomPainter {
   @override
   bool shouldRepaint(_WavePainter old) => old.level != level || old.amber != amber || old.mint != mint;
 }
+

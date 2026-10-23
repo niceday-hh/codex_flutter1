@@ -31,6 +31,8 @@ class ParaformerVoiceEngine implements VoiceEngine {
   Future<void>? _closing;
   String? _recordPath;
   String? _cacheDir;
+  Completer<void>? _ready;
+  int _modelGeneration = 0, _recordGeneration = 0;
   bool _closed = false;
   int _nextId = 0;
   @override
@@ -42,37 +44,45 @@ class ParaformerVoiceEngine implements VoiceEngine {
     return _preparing ??= _prepareWithRecovery();
   }
   Future<void> _prepareWithRecovery() async {
-    try { await _prepare().timeout(const Duration(seconds: 45)); }
+    final generation = ++_modelGeneration;
+    try { await _prepare(generation).timeout(const Duration(seconds: 45)); }
     catch (_) {
+      if (generation == _modelGeneration) _modelGeneration++;
       await _closeWorker();
       _preparing = null;
       rethrow;
     }
   }
-  Future<void> _prepare() async {
+  Future<void> _prepare(int generation) async {
     final files = await _channel.invokeMapMethod<String, String>('prepare');
-    if (_closed) throw StateError('语音已关闭');
+    if (_closed || generation != _modelGeneration) throw StateError('语音已关闭');
     if (files == null) throw StateError('语音模型不可用，请重新安装完整版本');
     _cacheDir = files['recordDir'];
-    final ready = Completer<void>();
+    final ready = _ready = Completer<void>();
+    // Attach an error handler before spawning: cancellation can race the spawn.
+    unawaited(ready.future.catchError((Object _) {}));
     _responses = ReceivePort();
     _responses!.listen((dynamic message) {
       final data = message as List;
       if (data[0] == 'ready') {
         _commands = data[1] as SendPort;
-        ready.complete();
+        if (!ready.isCompleted) ready.complete();
       } else if (data[0] == 'initError') {
-        ready.completeError(StateError('${data[1]}'));
+        if (!ready.isCompleted) ready.completeError(StateError('${data[1]}'));
       } else {
         final completer = _pending.remove(data[1] as int);
         if (data[0] == 'error') { completer?.completeError(StateError('${data[2]}')); }
         else { completer?.complete('${data[2]}'); }
       }
     });
-    _worker = await Isolate.spawn(_recognizerWorker,
+    final worker = await Isolate.spawn(_recognizerWorker,
       [_responses!.sendPort, files['model']!, files['tokens']!], debugName: 'paraformer-local-asr');
+    if (_closed || generation != _modelGeneration) {
+      worker.kill(priority: Isolate.immediate);
+      throw StateError('语音准备已取消');
+    }
+    _worker = worker;
     await ready.future;
-    if (_closed) await _closeWorker();
   }
 
   Future<String> _request(String action, String path) {
@@ -88,39 +98,63 @@ class ParaformerVoiceEngine implements VoiceEngine {
 
   @override
   Future<bool> start() async {
-    await prepare();
     if (_closed) return false;
+    final generation = ++_recordGeneration;
+    // Recording never waits for model extraction or recognizer construction.
+    unawaited(prepare().catchError((Object _) {}));
     final recorder = _recorder ??= _recorderFactory();
     if (!await recorder.hasPermission()) return false;
-    if (_closed) return false;
-    _recordPath = '$_cacheDir/voice-${DateTime.now().microsecondsSinceEpoch}.wav';
-    await recorder.start(const RecordConfig(encoder: AudioEncoder.wav,
-      sampleRate: 16000, numChannels: 1, autoGain: true, noiseSuppress: true, echoCancel: true), path: _recordPath!);
-    _amplitude = recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((a) {
-      if (!_levels.isClosed) _levels.add(((a.current + 55) / 55).clamp(0.0, 1.0).toDouble());
-    });
-    return true;
+    if (_closed || generation != _recordGeneration) return false;
+    final folder = _cacheDir ?? await _channel.invokeMethod<String>('recordDirectory');
+    if (_closed || generation != _recordGeneration) return false;
+    if (folder == null) throw StateError('无法创建录音目录');
+    final path = '$folder/voice-${DateTime.now().microsecondsSinceEpoch}.wav';
+    _recordPath = path;
+    try {
+      await recorder.start(const RecordConfig(encoder: AudioEncoder.wav,
+        sampleRate: 16000, numChannels: 1, autoGain: true, noiseSuppress: true, echoCancel: true), path: path);
+      if (_closed || generation != _recordGeneration) {
+        await recorder.cancel(); await _deleteRecording(path); return false;
+      }
+      _amplitude = recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((a) {
+        if (!_levels.isClosed) _levels.add(((a.current + 55) / 55).clamp(0.0, 1.0).toDouble());
+      });
+      return true;
+    } catch (_) { await _deleteRecording(path); rethrow; }
   }
 
   @override
   Future<String?> stop() async {
+    final generation = _recordGeneration;
+    final recording = _recordPath;
     await _amplitude?.cancel(); _amplitude = null;
     final path = await _recorder?.stop();
-    if (path == null || _closed) { await _deleteRecording(); return null; }
-    try { return await _request('decode', path); }
-    finally { await _deleteRecording(); }
+    if (path == null || _closed || generation != _recordGeneration) {
+      await _deleteRecording(recording); return null;
+    }
+    try {
+      // Audio has already been closed safely, even if the model is still cold.
+      await prepare();
+      if (_closed || generation != _recordGeneration) return null;
+      final text = await _request('decode', path);
+      return _closed || generation != _recordGeneration ? null : text;
+    } finally { await _deleteRecording(recording); }
   }
-  Future<void> _deleteRecording() async {
-    final path = _recordPath; _recordPath = null;
+  Future<void> _deleteRecording(String? path) async {
+    if (path == _recordPath) _recordPath = null;
     if (path != null) { try { await File(path).delete(); } catch (_) {} }
   }
   @override
   Future<void> cancel() async {
+    _recordGeneration++;
+    final path = _recordPath;
     await _amplitude?.cancel(); _amplitude = null;
     await _recorder?.cancel();
-    await _deleteRecording();
+    await _deleteRecording(path);
   }
   Future<void> _closeWorker() async {
+    final ready = _ready; _ready = null;
+    if (ready != null && !ready.isCompleted) ready.completeError(StateError('语音准备已取消'));
     if (_commands != null) {
       try { await _request('close', '').timeout(const Duration(seconds: 3)); } catch (_) {}
     }
@@ -135,8 +169,9 @@ class ParaformerVoiceEngine implements VoiceEngine {
   Future<void> close() => _closing ??= _close();
   Future<void> _close() async {
     if (_closed) return;
-    _closed = true;
-    try { await cancel(); await _preparing; } catch (_) {}
+    _closed = true; _modelGeneration++;
+    // Do not wait for a cold model to finish before releasing it.
+    try { await cancel(); } catch (_) {}
     await _closeWorker();
     try { await _recorder?.dispose(); } catch (_) {}
     await _levels.close();
@@ -177,3 +212,4 @@ void _recognizerWorker(List<dynamic> args) {
     });
   } catch (error) { recognizer?.free(); output.send(['initError', '$error']); }
 }
+

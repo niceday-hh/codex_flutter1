@@ -27,7 +27,7 @@ class PreparedEngine extends FakeVoiceEngine {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   VoiceEngineCache cacheFor(List<PreparedEngine> engines, {PreparedEngine Function()? factory}) {
-    final cache = VoiceEngineCache(factory: () {
+    final cache = VoiceEngineCache(backgroundRetention: Duration.zero, factory: () {
       final e = factory?.call() ?? PreparedEngine(); engines.add(e); return e;
     });
     cache.didChangeAppLifecycleState(AppLifecycleState.resumed);
@@ -155,3 +155,4 @@ void main() {
     await tester.runAsync(tick); expect(engines.single.closed, isTrue); store.dispose();
   });
 }
+

@@ -15,7 +15,10 @@ class VoiceSession extends ChangeNotifier {
   final Set<VoiceField> editedFields = {};
   int _parseGeneration = 0;
   bool reparsing = false;
-  VoiceStage stage = VoiceStage.preparing;
+  VoiceStage stage = VoiceStage.ready;
+  bool modelPreparing = false, _modelReady = false;
+  Future<void>? _preparation;
+  int _preparationGeneration = 0;
   VoiceDraft? draft;
   String? error;
   double level = 0;
@@ -27,23 +30,31 @@ class VoiceSession extends ChangeNotifier {
   Future<void>? _startTask;
 
   void _publish() { if (!_closed) notifyListeners(); }
-  Future<void> prepare() async {
-    stage = VoiceStage.preparing; error = null; _publish();
+  Future<void> prepare({bool refresh = false}) {
+    if (refresh) { _modelReady = false; _preparation = null; _preparationGeneration++; }
+    if (_closed || _modelReady) return Future.value();
+    return _preparation ??= _prepareModel();
+  }
+  Future<void> _prepareModel() async {
+    final generation = ++_preparationGeneration;
+    modelPreparing = true;
+    _levels ??= engine.levels.listen((value) { level = value; _publish(); });
+    _publish();
     try {
       await engine.prepare();
-      if (_closed) return;
-      stage = VoiceStage.ready;
-      _levels ??= engine.levels.listen((value) { level = value; _publish(); });
+      if (!_closed && generation == _preparationGeneration) _modelReady = true;
     } catch (_) {
-      if (_closed) return;
-      stage = VoiceStage.error; error = '离线语音准备失败，请按住说话重试；仍失败可重新打开语音输入';
+      // The recorder remains usable. stop() retries preparation and reports
+      // an error if inference still cannot run; never overwrite recording state.
+    } finally {
+      if (generation == _preparationGeneration) { modelPreparing = false; _preparation = null; _publish(); }
     }
-    _publish();
   }
 
   Future<void> hold() {
     if (_closed || ![VoiceStage.ready, VoiceStage.error].contains(stage)) return Future.value();
     _held = true;
+    unawaited(prepare());
     return _startTask = _start();
   }
   Future<void> _start() async {
@@ -154,3 +165,4 @@ typedef _VoiceParseInput = ({String text, DateTime now, List<NoteChoice> expense
 VoiceDraft _parseVoiceDraft(_VoiceParseInput input) => parseVoiceEntry(input.text, now: input.now,
   catalog: NoteCatalog.fromChoices(expense: input.expense, income: input.income),
   incomeOverride: input.incomeOverride, noteOverride: input.noteOverride);
+

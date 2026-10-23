@@ -90,6 +90,23 @@ class ProfilePage extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CalendarSettings())),
                 ),
                 _divider(context),
+                _ToggleRow(
+                  icon: Icons.mic_none_rounded,
+                  title: '后台短暂保留语音模型',
+                  subtitle: '短暂切回可复用 · 切出即停止录音',
+                  value: store.keepVoiceModelInBackground,
+                  onChanged: store.setKeepVoiceModelInBackground,
+                ),
+                _divider(context),
+                _ArrowRow(
+                  icon: Icons.timer_outlined,
+                  title: '语音模型保留时长',
+                  subtitle: store.keepVoiceModelInBackground
+                    ? '切出后最多 ${store.voiceBackgroundSeconds} 秒 · 内存紧张时提前释放'
+                    : '已关闭保留 · 切出即释放（时长 ${store.voiceBackgroundSeconds} 秒）',
+                  onTap: () => _chooseVoiceRetention(context, store),
+                ),
+                _divider(context),
                 _ArrowRow(
                   icon: Icons.notes_rounded,
                   title: '常用备注数量',
@@ -133,7 +150,7 @@ class ProfilePage extends StatelessWidget {
           const SizedBox(height: 22),
           Center(
             child: Text(
-              '拾光账本 2.0 · Flutter 优化版',
+              '拾光账本 3.1.4',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11.5, letterSpacing: 0.6),
             ),
           ),
@@ -143,6 +160,25 @@ class ProfilePage extends StatelessWidget {
   }
 
   static Widget _divider(BuildContext context) => Divider(height: 1, indent: 60, color: Theme.of(context).dividerColor);
+
+  static Future<void> _chooseVoiceRetention(BuildContext context, AppStore store) async {
+    final seconds = await showModalBottomSheet<int>(context: context,
+      showDragHandle: true, useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) => Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 26),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('语音模型保留时长', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text('短暂切换其他应用后返回，可直接复用模型。仅保留模型，不保留录音；超时或内存紧张时释放。',
+            style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          Wrap(spacing: 10, runSpacing: 10, children: [5, 10, 15, 30].map((value) => ChoiceChip(
+            label: Text('$value 秒'), selected: store.voiceBackgroundSeconds == value,
+            selectedColor: AppPalette.primarySoft,
+            onSelected: (_) => Navigator.pop(context, value))).toList()),
+        ])));
+    if (seconds != null) store.setVoiceBackgroundSeconds(seconds);
+  }
 
   static Future<void> _chooseNoteLimit(BuildContext context, AppStore store) async {
     final value = await showModalBottomSheet<int>(
@@ -354,4 +390,5 @@ class _ArrowRow extends StatelessWidget {
     );
   }
 }
+
 
